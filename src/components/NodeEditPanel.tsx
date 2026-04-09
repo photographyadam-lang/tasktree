@@ -3,10 +3,13 @@ import { db, putNode } from '../db';
 import type { TaskNode } from '../types';
 import { X, Sparkles } from 'lucide-react';
 import { PromptSandbox } from './PromptSandbox';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: () => void }) {
   const [node, setNode] = useState<TaskNode | null>(null);
   const [showSandbox, setShowSandbox] = useState(false);
+  const [isDecomposing, setIsDecomposing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -19,6 +22,39 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
   }, [nodeId]);
 
   if (!node) return null;
+
+  const triggerDecompose = async () => {
+                 setIsDecomposing(true);
+                 setErrorMessage(null);
+                 try {
+                     const chain = import('../utils/graphQueries').then(m => m.getAncestorPath(node.id));
+                     const resolvedChain = await chain;
+                     const promptStr = import('../utils/promptRenderer').then(m => m.renderPrompt(node, resolvedChain));
+                     
+                     const { decomposeNode } = await import('../api');
+                     const result = await decomposeNode({
+                         nodePayload: node,
+                         ancestorChain: resolvedChain,
+                         userPrompt: await promptStr
+                     }, true);
+                     
+                     await db.nodes.bulkPut(result);
+                     const updatedParent = { ...node, last_decomposed_at: new Date().toISOString() };
+                     await putNode(updatedParent);
+                     setNode(updatedParent);
+                 } catch (e: any) {
+                     setErrorMessage(e.message || "Unknown decomposition error");
+                 } finally {
+                     setIsDecomposing(false);
+                 }
+  };
+
+  useKeyboardShortcuts({
+     activeNodeId: nodeId,
+     clearActiveNode: onClose,
+     triggerDecompose,
+     openSandbox: () => setShowSandbox(true)
+  });
 
   // AC 2: Auto-save on blur natively executes Dexie put immediately
   const handleBlur = async (field: keyof TaskNode, stringValue: string) => {
@@ -52,6 +88,14 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
             <button onClick={onClose} className="p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition rounded-md"><X size={18} /></button>
           </div>
        </div>
+
+       {errorMessage && (
+         <div className="mx-5 mt-5 mb-0 bg-red-50 border-l-4 border-red-500 p-3 shadow-sm flex items-start gap-3 rounded-r-md min-h-[3rem]">
+            <div className="font-bold text-red-700 text-sm whitespace-nowrap">⚠ Error</div>
+            <div className="flex-1 overflow-hidden break-words text-sm text-red-900">{errorMessage}</div>
+            <button className="text-red-400 hover:text-red-700 font-bold px-1" onClick={() => setErrorMessage(null)}>X</button>
+         </div>
+       )}
 
        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5 text-sm">
           <div className="space-y-1.5">
@@ -141,7 +185,17 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
           </div>
        </div>
 
-       {showSandbox && <PromptSandbox node={node} onClose={() => setShowSandbox(false)} />}
-    </div>
+        <div className="p-4 border-t bg-slate-50 flex gap-2">
+           <button 
+             onClick={triggerDecompose}
+             className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-sm transition disabled:opacity-50"
+             disabled={isDecomposing}
+           >
+             {isDecomposing ? 'Decomposing...' : 'Decompose (Local AI)'}
+           </button>
+        </div>
+
+        {showSandbox && <PromptSandbox node={node} onClose={() => setShowSandbox(false)} />}
+     </div>
   );
 }

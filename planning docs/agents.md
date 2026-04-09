@@ -1,5 +1,9 @@
 # Agent Personas for Task Graph Planner
 
+> **⚠️ UNIVERSAL TESTING RULE**
+> All tests (Unit & E2E) MUST be run and errors found and corrected before ANY work can be considered "done". 
+> You must continuously review the effectiveness of tests and ensure that a strong, comprehensive testing strategy is in place and actively maintained as the application evolves.
+
 To ensure technical excellence, instruct the coding agent to adopt these personas based on the task:
 
 ## 1. The Architect (System Design)

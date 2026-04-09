@@ -8,13 +8,13 @@ Read the **"What I am working on right now"** field below. **If blank, STOP.** D
 
 ## What I am working on right now
 
-Active Task: Phase 1.5 & Phase 2 — Node Edit Panel, List View, Export, & Prompt Sandbox.
+Active Task: Phase 4 — Testing and Verification (Automated & Manual)
 
-**Status:** Awaiting Implementation Plan. **Goal:** Build the UI side-panel to manually edit all metadata, a list view of leaf tasks, and implement the markdown/json export along with the Prompt Sandbox ready for LLM wiring.
+**Status:** Awaiting Implementation Plan. **Goal:** Build testing scaffolds natively executing LLM proxy sequences ensuring stable mapping through the end-to-end user journey before deployment.
 
 ## Last completed task
 
-Phase 1 (1.1 - 1.3) Setup, Dexie data layer, React Flow Canvas, and Core v3.1 Safety Rails.
+Phase 1.5 & Phase 2 UI Components, Canvas Hooks, and Export/Prompt Engines.
 
 ## Next steps
 

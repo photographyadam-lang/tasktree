@@ -98,6 +98,7 @@ export function GraphCanvas({ activeNodeId, onNodeSelect }: GraphCanvasProps) {
           id: node.id,
           type: 'taskGraphNode',
           position: { x: 0, y: 0 },
+          selected: node.id === activeNodeId,
           data: {
             taskNode: node,
             isStale,

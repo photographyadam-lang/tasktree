@@ -1,0 +1,197 @@
+﻿
+Running 3 tests using 3 workers
+
+[1A[2K[1/3] [chromium] ΓÇ║ e2e\graph.spec.ts:46:3 ΓÇ║ Task Graph Planner E2E ΓÇ║ List View topological toggling
+[1A[2K[2/3] [chromium] ΓÇ║ e2e\graph.spec.ts:19:3 ΓÇ║ Task Graph Planner E2E ΓÇ║ Node Panel interaction logic
+[1A[2K[3/3] [chromium] ΓÇ║ e2e\graph.spec.ts:4:3 ΓÇ║ Task Graph Planner E2E ΓÇ║ Canvas loads and Dagre tree logic executes resolving mock nodes
+node.exe : [1A[2K[2m[WebServer] [22m[2m3:41:14 PM[22m 
+[33m[1m[vite][22m[39m [33m[2m(client)[22m[39m 
+[2m[console.warn] [22m[React Flow]: It looks like you've 
+created a new nodeTypes or edgeTypes object. If this wasn't on 
+purpose please define the nodeTypes/edgeTypes outside of the 
+component or memoize them. Help: 
+https://reactflow.dev/error#002
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program 
+Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([1A[2K[2m[We.. 
+   .w.dev/error#002:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+[1A[2K[2m[WebServer] [22m[2m3:41:14 PM[22m 
+[33m[1m[vite][22m[39m [33m[2m(client)[22m[39m 
+[2m[console.warn] [22m[React Flow]: It looks like you've 
+created a new nodeTypes or edgeTypes object. If this wasn't on 
+purpose please define the nodeTypes/edgeTypes outside of the 
+component or memoize them. Help: 
+https://reactflow.dev/error#002
+
+[1A[2K[2m[WebServer] [22m[2m3:41:14 PM[22m 
+[33m[1m[vite][22m[39m [33m[2m(client)[22m[39m 
+[2m[console.warn] [22m[React Flow]: It looks like you've 
+created a new nodeTypes or edgeTypes object. If this wasn't on 
+purpose please define the nodeTypes/edgeTypes outside of the 
+component or memoize them. Help: 
+https://reactflow.dev/error#002
+
+[1A[2K[2m[WebServer] [22m[2m3:41:14 PM[22m 
+[33m[1m[vite][22m[39m [33m[2m(client)[22m[39m 
+[2m[console.warn] [22m[React Flow]: It looks like you've 
+created a new nodeTypes or edgeTypes object. If this wasn't on 
+purpose please define the nodeTypes/edgeTypes outside of the 
+component or memoize them. Help: 
+https://reactflow.dev/error#002
+
+[1A[2K[2m[WebServer] [22m[2m3:41:14 PM[22m 
+[33m[1m[vite][22m[39m [33m[2m(client)[22m[39m 
+[2m[console.warn] [22m[React Flow]: It looks like you've 
+created a new nodeTypes or edgeTypes object. If this wasn't on 
+purpose please define the nodeTypes/edgeTypes outside of the 
+component or memoize them. Help: 
+https://reactflow.dev/error#002
+
+[1A[2K[2m[WebServer] [22m[2m3:41:14 PM[22m 
+[33m[1m[vite][22m[39m [33m[2m(client)[22m[39m 
+[2m[console.warn] [22m[React Flow]: It looks like you've 
+created a new nodeTypes or edgeTypes object. If this wasn't on 
+purpose please define the nodeTypes/edgeTypes outside of the 
+component or memoize them. Help: 
+https://reactflow.dev/error#002
+
+[1A[2K[2m[WebServer] [22m[2m3:41:14 PM[22m 
+[33m[1m[vite][22m[39m [33m[2m(client)[22m[39m 
+[2m[console.warn] [22m[React Flow]: It looks like you've 
+created a new nodeTypes or edgeTypes object. If this wasn't on 
+purpose please define the nodeTypes/edgeTypes outside of the 
+component or memoize them. Help: 
+https://reactflow.dev/error#002
+
+[1A[2K[2m[WebServer] [22m[2m3:41:14 PM[22m 
+[33m[1m[vite][22m[39m [33m[2m(client)[22m[39m 
+[2m[console.warn] [22m[React Flow]: It looks like you've 
+created a new nodeTypes or edgeTypes object. If this wasn't on 
+purpose please define the nodeTypes/edgeTypes outside of the 
+component or memoize them. Help: 
+https://reactflow.dev/error#002
+
+[1A[2K  1) [chromium] ΓÇ║ e2e\graph.spec.ts:19:3 ΓÇ║ Task Graph Planner E2E ΓÇ║ Node Panel interaction logic ΓöÇΓöÇΓöÇ
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByText('Phase 1 - Data & Canvas')
+    Expected: visible
+    Error: strict mode violation: getByText('Phase 1 - Data & Canvas') resolved to 2 elements:
+        1) <div class="text-sm font-semibold truncate w-36 text-slate-900">Phase 1 - Data & Canvas</div> aka getByTestId('rf__node-89c9f19a-c038-46cf-8685-3097d6132747')
+        2) <div class="text-sm font-semibold truncate w-36 text-slate-900">Phase 1 - Data & Canvas</div> aka getByTestId('rf__node-c5da94a4-5f30-49b0-9b59-81c31f9bcee9')
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for getByText('Phase 1 - Data & Canvas')[22m
+
+
+      22 |     // Explicitly target the Epic node via inner title mapping
+      23 |     const epicNodeText = page.getByText('Phase 1 - Data & Canvas');
+    > 24 |     await expect(epicNodeText).toBeVisible();
+         |                                ^
+      25 |     
+      26 |     // Double click the exact bounding container representing the React Flow node wrapper dynamically mapped
+      27 |     await epicNodeText.locator('xpath=ancestor::div[contains(@class, "react-flow__node")]').click();
+        at C:\Users\adam\OneDrive\Documents\projects\task graph builder\e2e\graph.spec.ts:24:32
+
+    Error Context: test-results\graph-Task-Graph-Planner-E2E-Node-Panel-interaction-logic-chromium\error-context.md
+
+
+[1A[2K  2) [chromium] ΓÇ║ e2e\graph.spec.ts:46:3 ΓÇ║ Task Graph Planner E2E ΓÇ║ List View topological toggling ΓöÇ
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByText('Ready to Agent')
+    Expected: visible
+    Error: strict mode violation: getByText('Ready to Agent') resolved to 2 elements:
+        1) <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded bg-green-100 text-green-700">Ready to Agent</span> aka getByText('Ready to Agent').first()
+        2) <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded bg-green-100 text-green-700">Ready to Agent</span> aka getByText('Ready to Agent').nth(1)
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for getByText('Ready to Agent')[22m
+
+
+      52 |     await expect(page.getByText('Leaf Task Execution List')).toBeVisible();
+      53 |     // Validate Khan's alg output
+    > 54 |     await expect(page.getByText('Ready to Agent')).toBeVisible();
+         |                                                    ^
+      55 |   });
+      56 | });
+      57 |
+        at C:\Users\adam\OneDrive\Documents\projects\task graph builder\e2e\graph.spec.ts:54:52
+
+    Error Context: test-results\graph-Task-Graph-Planner-E2E-List-View-topological-toggling-chromium\error-context.md
+
+
+[1A[2K[2m[WebServer] [22m[2m3:41:14 PM[22m 
+[33m[1m[vite][22m[39m [33m[2m(client)[22m[39m 
+[2m[console.warn] [22m[React Flow]: It looks like you've 
+created a new nodeTypes or edgeTypes object. If this wasn't on 
+purpose please define the nodeTypes/edgeTypes outside of the 
+component or memoize them. Help: 
+https://reactflow.dev/error#002
+
+[1A[2K[2m[WebServer] [22m[2m3:41:14 PM[22m 
+[33m[1m[vite][22m[39m [33m[2m(client)[22m[39m 
+[2m[console.warn] [22m[React Flow]: It looks like you've 
+created a new nodeTypes or edgeTypes object. If this wasn't on 
+purpose please define the nodeTypes/edgeTypes outside of the 
+component or memoize them. Help: 
+https://reactflow.dev/error#002
+
+[1A[2K[2m[WebServer] [22m[2m3:41:15 PM[22m 
+[33m[1m[vite][22m[39m [33m[2m(client)[22m[39m 
+[2m[console.warn] [22m[React Flow]: It looks like you've 
+created a new nodeTypes or edgeTypes object. If this wasn't on 
+purpose please define the nodeTypes/edgeTypes outside of the 
+component or memoize them. Help: 
+https://reactflow.dev/error#002
+
+[1A[2K[2m[WebServer] [22m[2m3:41:15 PM[22m 
+[33m[1m[vite][22m[39m [33m[2m(client)[22m[39m 
+[2m[console.warn] [22m[React Flow]: It looks like you've 
+created a new nodeTypes or edgeTypes object. If this wasn't on 
+purpose please define the nodeTypes/edgeTypes outside of the 
+component or memoize them. Help: 
+https://reactflow.dev/error#002
+
+[1A[2K  3) [chromium] ΓÇ║ e2e\graph.spec.ts:4:3 ΓÇ║ Task Graph Planner E2E ΓÇ║ Canvas loads and Dagre tree logic executes resolving mock nodes 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByText('Task Graph Planner')
+    Expected: visible
+    Error: strict mode violation: getByText('Task Graph Planner') resolved to 3 elements:
+        1) <h1 class="font-bold text-lg text-slate-800 tracking-tight flex items-center gap-2">ΓÇª</h1> aka getByRole('heading', { name: 'Task Graph Planner' })
+        2) <div class="text-sm font-semibold truncate w-36 text-slate-900">Task Graph Planner Delivery</div> aka getByTestId('rf__node-317fd9a3-edf3-4e51-8521-89e219d3ac7e')
+        3) <div class="text-sm font-semibold truncate w-36 text-slate-900">Task Graph Planner Delivery</div> aka getByTestId('rf__node-beef164f-614c-45b9-89a1-d0804dc079df')
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for getByText('Task Graph Planner')[22m
+
+
+       6 |     
+       7 |     // Ensure Header Loaded
+    >  8 |     await expect(page.getByText('Task Graph Planner')).toBeVisible();
+         |                                                        ^
+       9 |
+      10 |     // Verify React Flow elements exist (ensuring canvas maps mock elements)
+      11 |     const reactFlowWrap = page.locator('.react-flow');
+        at C:\Users\adam\OneDrive\Documents\projects\task graph builder\e2e\graph.spec.ts:8:56
+
+    Error Context: test-results\graph-Task-Graph-Planner-E-77cb5-ecutes-resolving-mock-nodes-chromium\error-context.md
+
+
+[1A[2K  3 failed
+    [chromium] ΓÇ║ e2e\graph.spec.ts:4:3 ΓÇ║ Task Graph Planner E2E ΓÇ║ Canvas loads and Dagre tree logic executes resolving mock nodes 
+    [chromium] ΓÇ║ e2e\graph.spec.ts:19:3 ΓÇ║ Task Graph Planner E2E ΓÇ║ Node Panel interaction logic ΓöÇΓöÇΓöÇΓöÇ
+    [chromium] ΓÇ║ e2e\graph.spec.ts:46:3 ΓÇ║ Task Graph Planner E2E ΓÇ║ List View topological toggling ΓöÇΓöÇ
