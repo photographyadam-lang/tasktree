@@ -21,9 +21,8 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
     return () => { active = false; };
   }, [nodeId]);
 
-  if (!node) return null;
-
   const triggerDecompose = async () => {
+                 if (!node) return;
                  setIsDecomposing(true);
                  setErrorMessage(null);
                  try {
@@ -55,6 +54,8 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
      triggerDecompose,
      openSandbox: () => setShowSandbox(true)
   });
+
+  if (!node) return null;
 
   // AC 2: Auto-save on blur natively executes Dexie put immediately
   const handleBlur = async (field: keyof TaskNode, stringValue: string) => {
