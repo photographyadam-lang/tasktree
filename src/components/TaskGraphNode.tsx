@@ -17,6 +17,7 @@ export function TaskGraphNode({ data, selected }: { data: { taskNode: TaskNode, 
 
   return (
     <div 
+      data-testid={`node-card-${type}`}
       className={`relative px-4 py-3 rounded-lg w-48 shadow-sm transition-all
         ${colors[type]}
         ${selected ? 'ring-2 ring-offset-1 ring-blue-600' : ''}

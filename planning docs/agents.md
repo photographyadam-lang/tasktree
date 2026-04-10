@@ -3,6 +3,8 @@
 > **⚠️ UNIVERSAL TESTING RULE**
 > All tests (Unit & E2E) MUST be run and errors found and corrected before ANY work can be considered "done". 
 > You must continuously review the effectiveness of tests and ensure that a strong, comprehensive testing strategy is in place and actively maintained as the application evolves.
+>
+> **Ollama Dependency Rule:** Before running any backend tests that require LLM functionality, the test suite MUST first verify Ollama is running (`GET http://localhost:11434/api/tags`). If Ollama is not running, tests must emit a clear warning (`pytest.skip` with message "Ollama not running — start Ollama before running integration tests") rather than failing with a confusing connection error. This check must be implemented as a pytest fixture in `conftest.py`.
 
 To ensure technical excellence, instruct the coding agent to adopt these personas based on the task:
 
