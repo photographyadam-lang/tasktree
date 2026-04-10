@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, putNode } from '../db';
 import type { TaskNode } from '../types';
+import type { NodeReviewReport } from '../types/review';
 import { X, Sparkles, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { PromptSandbox } from './PromptSandbox';
 import { ModelSelector } from './ModelSelector';
@@ -14,12 +15,23 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
   const [selectedModel, setSelectedModel] = useState<string>('qwen3:14b');
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [reviewReport, setReviewReport] = useState<NodeReviewReport | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [showRegenInput, setShowRegenInput] = useState(false);
+  const [regenInstruction, setRegenInstruction] = useState('');
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenProposal, setRegenProposal] = useState<Partial<TaskNode> | null>(null);
+  const [regenError, setRegenError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     const fetchNode = async () => {
       const n = await db.nodes.get(nodeId);
-      if (active && n) setNode(n);
+      if (active && n) {
+        setNode(n);
+        if (n.last_review) setReviewReport(n.last_review);
+      }
     };
     fetchNode();
     return () => { active = false; };
@@ -61,6 +73,53 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
                  } finally {
                      setIsDecomposing(false);
                  }
+  };
+
+  const triggerReview = async () => {
+    if (!node) return;
+    setIsReviewing(true);
+    setReviewError(null);
+    setReviewReport(null);
+    try {
+      const { reviewNode } = await import('../api');
+      const report = await reviewNode(node);
+      setReviewReport(report);
+      const updated = { ...node, last_review: report };
+      await putNode(updated);
+      setNode(updated);
+    } catch (e: any) {
+      setReviewError('Review failed — try again');
+    } finally {
+      setIsReviewing(false);
+    }
+  };
+
+  const triggerRegen = async () => {
+    if (!node || !regenInstruction.trim()) return;
+    setIsRegenerating(true);
+    setRegenError(null);
+    setRegenProposal(null);
+    try {
+      const { regenNode } = await import('../api');
+      // TODO: wire architecture_context from project node's architecture block (Phase B)
+      const proposal = await regenNode({ node, instructions: regenInstruction, architecture_context: '' });
+      setRegenProposal(proposal);
+    } catch (e: any) {
+      setRegenError('Generation failed — try again');
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
+  const applyRegen = async () => {
+    if (!node || !regenProposal) return;
+    const updated = { ...node, ...regenProposal, last_review: null };
+    await putNode(updated);
+    setNode(updated);
+    setReviewReport(null);
+    setRegenProposal(null);
+    setRegenInstruction('');
+    setShowRegenInput(false);
   };
 
   useKeyboardShortcuts({
@@ -157,6 +216,12 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
 
   // Helper converting arrays cleanly back to strings for textarea defaults
   const asStr = (val: any) => (Array.isArray(val) ? val.join(', ') : val || '');
+
+  const formatFieldValue = (val: unknown): string => {
+    if (val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)) return '[none]';
+    if (Array.isArray(val)) return val.join(', ');
+    return String(val);
+  };
 
   return (
     <div className="absolute top-0 right-0 h-full w-[450px] bg-white border-l shadow-2xl z-50 flex flex-col transform transition-transform">
@@ -277,12 +342,135 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
           
           <div className="space-y-1.5 text-xs">
              <label className="font-semibold text-slate-700 block uppercase tracking-wide">Scope Constraints</label>
-             <input 
-               className="w-full border p-2 rounded-md focus:ring-2 focus:ring-blue-500 outline-none transition" 
+             <input
+               className="w-full border p-2 rounded-md focus:ring-2 focus:ring-blue-500 outline-none transition"
                value={asStr(node.scope)}
                onChange={e => setNode({ ...node, scope: e.target.value as any })}
                onBlur={e => handleBlur('scope', e.target.value)}
             />
+          </div>
+
+          <div className="pt-3 border-t space-y-3">
+            <button
+              data-testid="review-task-button"
+              onClick={triggerReview}
+              disabled={isReviewing}
+              className="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 px-4 rounded-md shadow-sm transition disabled:opacity-50"
+            >
+              {isReviewing ? 'Reviewing…' : 'Review Task'}
+            </button>
+
+            {reviewError && (
+              <p className="text-sm text-red-700 font-medium">{reviewError}</p>
+            )}
+
+            {reviewReport && !reviewError && (
+              <div data-testid="review-report" className="space-y-2 text-sm">
+                {reviewReport.passed ? (
+                  <p className="text-emerald-700 font-semibold">✅ This task is ready for Claude Code.</p>
+                ) : (
+                  <>
+                    <p className="font-semibold text-slate-700">Issues found:</p>
+
+                    {reviewReport.issues.filter(i => i.severity === 'blocking').length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-bold text-red-700 uppercase tracking-wide">🔴 Blocking</p>
+                        {reviewReport.issues.filter(i => i.severity === 'blocking').map((issue, idx) => (
+                          <div key={idx} className="bg-red-50 border border-red-200 rounded-md px-3 py-2 space-y-0.5">
+                            <p className="font-semibold text-red-900 text-xs">{issue.field} — {issue.problem}</p>
+                            <p className="text-red-700 text-xs">Suggestion: {issue.suggestion}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {reviewReport.issues.filter(i => i.severity === 'refine').length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-bold text-amber-700 uppercase tracking-wide">🟡 Refine</p>
+                        {reviewReport.issues.filter(i => i.severity === 'refine').map((issue, idx) => (
+                          <div key={idx} className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2 space-y-0.5">
+                            <p className="font-semibold text-amber-900 text-xs">{issue.field} — {issue.problem}</p>
+                            <p className="text-amber-700 text-xs">Suggestion: {issue.suggestion}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="pt-3 border-t space-y-3">
+            {!showRegenInput ? (
+              <button
+                data-testid="regen-button"
+                onClick={() => setShowRegenInput(true)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md shadow-sm transition"
+              >
+                Regenerate…
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <textarea
+                  data-testid="regen-instruction"
+                  className="w-full border p-2 rounded-md h-16 focus:ring-2 focus:ring-blue-500 outline-none transition resize-none text-sm"
+                  placeholder="e.g. Make the objective more specific and add two validation commands"
+                  value={regenInstruction}
+                  onChange={e => setRegenInstruction(e.target.value)}
+                  disabled={isRegenerating}
+                />
+                <div className="flex items-center gap-3">
+                  <button
+                    data-testid="regen-generate-button"
+                    onClick={triggerRegen}
+                    disabled={isRegenerating || !regenInstruction.trim()}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-4 rounded-md text-sm shadow-sm transition disabled:opacity-50"
+                  >
+                    {isRegenerating ? 'Generating…' : 'Generate'}
+                  </button>
+                  <button
+                    onClick={() => { setShowRegenInput(false); setRegenProposal(null); setRegenError(null); setRegenInstruction(''); }}
+                    className="text-slate-500 hover:text-slate-700 text-sm transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+
+                {regenError && (
+                  <p className="text-sm text-red-700 font-medium">{regenError}</p>
+                )}
+
+                {regenProposal && !regenError && (
+                  <div data-testid="regen-preview" className="space-y-2">
+                    <p className="font-semibold text-slate-700 text-sm">Proposed changes:</p>
+                    {Object.entries(regenProposal).map(([field, value]) => (
+                      <div key={field} className="bg-slate-50 border border-slate-200 rounded-md px-3 py-2 space-y-1">
+                        <p className="font-semibold text-slate-800 text-xs uppercase tracking-wide">{field}</p>
+                        <p className="text-xs text-red-700 font-mono">Before: {formatFieldValue(node[field as keyof TaskNode])}</p>
+                        <p className="text-xs text-emerald-700 font-mono">After:  {formatFieldValue(value)}</p>
+                      </div>
+                    ))}
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        data-testid="regen-apply-button"
+                        onClick={applyRegen}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-4 rounded-md text-sm shadow-sm transition"
+                      >
+                        Apply Changes
+                      </button>
+                      <button
+                        data-testid="regen-discard-button"
+                        onClick={() => setRegenProposal(null)}
+                        className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-1.5 px-4 rounded-md text-sm shadow-sm transition"
+                      >
+                        Discard
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
        </div>
 

@@ -1,4 +1,5 @@
 import type { TaskNode } from './types';
+import type { NodeReviewReport } from './types/review';
 
 export interface DecomposePayload {
   nodePayload: Partial<TaskNode>;
@@ -56,4 +57,44 @@ export async function decomposeNode(payload: DecomposePayload, isLocal: boolean 
 
   const data = await response.json();
   return data.nodes;
+}
+
+export interface RegenPayload {
+  node: TaskNode;
+  instructions: string;
+  architecture_context: string;
+}
+
+export async function regenNode(payload: RegenPayload): Promise<Partial<TaskNode>> {
+  let response: Response;
+  try {
+    response = await fetch('http://localhost:8000/llm/regen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new Error('Generation failed — try again');
+  }
+  if (!response.ok) {
+    throw new Error('Generation failed — try again');
+  }
+  return response.json();
+}
+
+export async function reviewNode(node: TaskNode): Promise<NodeReviewReport> {
+  let response: Response;
+  try {
+    response = await fetch('http://localhost:8000/llm/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ node }),
+    });
+  } catch {
+    throw new Error('Review failed — try again');
+  }
+  if (!response.ok) {
+    throw new Error('Review failed — try again');
+  }
+  return response.json();
 }

@@ -1,3 +1,5 @@
+import type { NodeReviewReport } from './types/review';
+
 export interface TaskNode {
   id: string;
   title: string;
@@ -18,6 +20,7 @@ export interface TaskNode {
   created_at: string;
   updated_at: string;
   last_decomposed_at: string | null;
+  last_review?: NodeReviewReport | null;
 }
 
 export interface TaskEdge {

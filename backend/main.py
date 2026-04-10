@@ -8,8 +8,10 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 import logging
 
-from utils.json_cleaner import clean_llm_json
+from utils.json_cleaner import clean_llm_json, clean_llm_json_object
 from utils.node_validator import validate_and_repair_node
+from models.review import NodeReviewReport, ReviewIssue  # noqa: F401 (ReviewIssue imported for Pydantic resolution)
+from models.regen import RegenResponse
 
 # Load .env spanning gracefully up relative path logic 
 load_dotenv(dotenv_path="../.env")
@@ -22,6 +24,8 @@ logger = logging.getLogger(__name__)
 ANTHROPIC_API_KEY = os.getenv("VITE_ANTHROPIC_API_KEY", "")
 if not ANTHROPIC_API_KEY:
     logger.warning("VITE_ANTHROPIC_API_KEY is missing. Cloud endpoints will fail.")
+
+CLOUD_MODEL = "claude-3-5-sonnet-20241022"
 
 app = FastAPI()
 
@@ -96,6 +100,7 @@ async def process_local_ollama(request: DecomposeRequest):
                     "model": ollama_model,
                     "prompt": request.userPrompt,
                     "stream": False,
+                    "keep_alive": 0,  # Immediately drop model from RAM after execution
                     "options": {"temperature": 0.2}
                 },
                 timeout=180.0
@@ -169,6 +174,198 @@ async def process_cloud_anthropic(request: DecomposeRequest):
     except Exception as e:
         logger.error(f"Cloud LLM Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Cloud LLM Execution Failed: {str(e)}")
+
+
+REVIEW_SYSTEM_PROMPT = """You are a senior software architect reviewing a task specification for clarity and completeness.
+Your job is to identify gaps that would cause an AI coding agent to produce incorrect, incomplete, or out-of-scope code.
+You must return a single JSON object matching this schema exactly — no markdown, no explanation, no preamble:
+{
+  "passed": boolean,
+  "readiness": "green" | "amber" | "red",
+  "issues": [
+    {
+      "field": string,
+      "severity": "blocking" | "refine",
+      "problem": string,
+      "suggestion": string
+    }
+  ]
+}
+Rules:
+- passed is true only when issues is empty.
+- readiness is "red" if any issue has severity "blocking", "amber" if issues exist but none are blocking, "green" if no issues.
+- severity "blocking" means an AI coding agent cannot safely proceed without this being fixed.
+- severity "refine" means the task is actionable but would produce better results if improved.
+- Return { "passed": true, "readiness": "green", "issues": [] } if the task is genuinely complete.
+- Never invent issues. Only report real gaps."""
+
+
+class ReviewRequest(BaseModel):
+    node: dict  # the full node object from Dexie
+
+
+@app.post("/llm/review")
+async def review_node(request: ReviewRequest):
+    """Runs a structured LLM review of a node spec and returns a NodeReviewReport."""
+    logger.info("Executing POST /llm/review (Anthropic)")
+
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="Server misconfigured: VITE_ANTHROPIC_API_KEY is required for node review.")
+
+    node = request.node
+    user_prompt = f"""Review this task specification and return a NodeReviewReport JSON object.
+
+Node type: {node.get('type', 'unknown')}
+Title: {node.get('title', '')}
+Objective: {node.get('objective', '[missing]')}
+Summary: {node.get('summary', '[missing]')}
+Scope: {', '.join(node.get('scope', [])) or '[missing]'}
+Out of scope: {', '.join(node.get('out_of_scope', [])) or '[missing]'}
+Prerequisites: {', '.join(node.get('prerequisites', [])) or '[missing]'}
+Success criteria: {'; '.join(node.get('success_criteria', [])) or '[missing]'}
+Tests: {'; '.join(node.get('tests', [])) or '[missing]'}
+Validation commands: {'; '.join(node.get('validation_commands', [])) or '[missing]'}
+Risk: {node.get('risk', '[missing]')}
+Size: {node.get('size', '[missing]')}
+
+Identify any gaps that would cause an AI coding agent to produce incorrect, incomplete, or out-of-scope results.
+Return only the JSON object."""
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": CLOUD_MODEL,
+                    "max_tokens": 2048,
+                    "temperature": 0.0,
+                    "system": REVIEW_SYSTEM_PROMPT,
+                    "messages": [{"role": "user", "content": user_prompt}],
+                },
+                timeout=60.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+            raw_text = data.get("content", [{}])[0].get("text", "")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Anthropic API error: {e.response.status_code} {e.response.text}")
+        raise HTTPException(status_code=502, detail=f"Anthropic API error: {e.response.status_code}")
+    except Exception as e:
+        logger.error(f"Review LLM error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Review request failed: {str(e)}")
+
+    cleaned = clean_llm_json_object(raw_text)
+    try:
+        payload = json.loads(cleaned)
+    except json.JSONDecodeError:
+        logger.error(f"Failed to parse review response as JSON. Raw: {raw_text!r}")
+        raise HTTPException(status_code=422, detail={"error": "review_parse_failed", "raw": raw_text})
+
+    try:
+        report = NodeReviewReport.model_validate(payload)
+    except Exception as e:
+        logger.error(f"NodeReviewReport validation failed: {str(e)}. Payload: {payload}")
+        raise HTTPException(status_code=422, detail={"error": "review_parse_failed", "raw": raw_text})
+
+    return report.model_dump()
+
+
+REGEN_SYSTEM_PROMPT = """You are a senior software architect improving a task specification based on a developer's instruction.
+Your job is to update only the fields the instruction asks you to change — return a JSON object containing only those fields.
+Do not return unchanged fields. Do not add explanation or preamble. Return only valid JSON.
+The JSON object must contain only fields from this list:
+title, objective, summary, scope, out_of_scope, prerequisites, success_criteria, tests, validation_commands, notes, size, risk
+Array fields (scope, out_of_scope, prerequisites, success_criteria, tests, validation_commands) must be JSON arrays of strings.
+String fields (title, objective, summary, notes, size, risk) must be plain strings."""
+
+
+class RegenRequest(BaseModel):
+    node: dict
+    instructions: str
+    architecture_context: str = ""
+
+
+@app.post("/llm/regen")
+async def regen_node(request: RegenRequest):
+    """Regenerates specific node fields based on developer instructions."""
+    logger.info("Executing POST /llm/regen (Anthropic)")
+
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="Server misconfigured: VITE_ANTHROPIC_API_KEY is required for regen.")
+
+    node = request.node
+    instructions = request.instructions
+    architecture_context = request.architecture_context
+
+    user_prompt = f"""Current task specification:
+
+Node type: {node.get('type', 'unknown')}
+Title: {node.get('title', '')}
+Objective: {node.get('objective', '[missing]')}
+Summary: {node.get('summary', '[missing]')}
+Scope: {json.dumps(node.get('scope', []))}
+Out of scope: {json.dumps(node.get('out_of_scope', []))}
+Prerequisites: {json.dumps(node.get('prerequisites', []))}
+Success criteria: {json.dumps(node.get('success_criteria', []))}
+Tests: {json.dumps(node.get('tests', []))}
+Validation commands: {json.dumps(node.get('validation_commands', []))}
+Notes: {node.get('notes', '')}
+Size: {node.get('size', '')}
+Risk: {node.get('risk', '')}
+
+{'Architecture context: ' + architecture_context if architecture_context else ''}
+
+Developer instruction: {instructions}
+
+Return only the JSON object containing the fields you changed. Do not explain."""
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": CLOUD_MODEL,
+                    "max_tokens": 2048,
+                    "temperature": 0.3,
+                    "system": REGEN_SYSTEM_PROMPT,
+                    "messages": [{"role": "user", "content": user_prompt}],
+                },
+                timeout=60.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+            raw_text = data.get("content", [{}])[0].get("text", "")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Anthropic API error: {e.response.status_code} {e.response.text}")
+        raise HTTPException(status_code=502, detail=f"Anthropic API error: {e.response.status_code}")
+    except Exception as e:
+        logger.error(f"Regen LLM error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Regen request failed: {str(e)}")
+
+    cleaned = clean_llm_json_object(raw_text)
+    try:
+        payload = json.loads(cleaned)
+    except json.JSONDecodeError:
+        logger.error(f"Failed to parse regen response as JSON. Raw: {raw_text!r}")
+        raise HTTPException(status_code=422, detail={"error": "regen_parse_failed", "raw": raw_text})
+
+    try:
+        result = RegenResponse.model_validate(payload)
+    except Exception as e:
+        logger.error(f"RegenResponse validation failed: {str(e)}. Payload: {payload}")
+        raise HTTPException(status_code=422, detail={"error": "regen_parse_failed", "raw": raw_text})
+
+    return result.model_dump(exclude_none=True)
 
 
 def _process_and_validate_response(raw_text: str, parent_id: str = "", expected_child_type: str = ""):
