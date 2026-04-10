@@ -20,21 +20,22 @@ test.describe('Task Graph Planner E2E', () => {
     await page.goto('/');
     
     // Explicitly target the Epic node via inner title mapping
-    const epicNodeText = page.getByText('Phase 1 - Data & Canvas').first();
+    const epicNodeText = page.getByText('Phase 1 - Data & Canvas');
     await expect(epicNodeText).toBeVisible();
     
-    // Double click the exact bounding container representing the React Flow node wrapper dynamically mapped
-    await epicNodeText.locator('xpath=ancestor::div[contains(@class, "react-flow__node")]').click();
+    // Click exactly on the text to bypass any absolute wrapper overlays
+    await epicNodeText.click({ force: true });
     
     // Ensure slide out panel resolves natively mapping specific Radix boundaries/React states
-    await expect(page.getByText('Edit epic')).toBeVisible();
+    const panelHeader = page.getByRole('heading', { name: /Edit epic/i });
+    await expect(panelHeader).toBeVisible();
     
     // Type inside Size
     const select = page.getByRole('combobox').first(); // There are two comboboxes (Size, Risk)
     await select.selectOption('large');
 
-    // Blur triggers save automatically
-    await page.getByText('Edit epic').click();
+    // Blur triggers save automatically by clicking the panel header directly
+    await panelHeader.click();
     
     // Open Sandbox validation ensuring local validation blocks payload missing requirements explicitly
     await page.getByRole('button', { name: /Sandbox/i }).click();

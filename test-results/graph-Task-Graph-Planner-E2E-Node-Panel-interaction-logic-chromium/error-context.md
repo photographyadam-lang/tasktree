@@ -12,12 +12,17 @@
 # Error details
 
 ```
-Error: locator.click: Error: strict mode violation: getByText('Phase 1 - Data & Canvas').first().locator('xpath=ancestor::div[contains(@class, "react-flow__node")]') resolved to 2 elements:
-    1) <div class="react-flow__nodes">…</div> aka getByText('projectTask Graph Planner DeliveryepicPhase 1 - Data & CanvasepicPhase 1 - Data')
-    2) <div tabindex="0" role="button" aria-describedby="react-flow__node-desc-1" data-id="27e67931-3f20-4338-bee6-05cb92254401" data-testid="rf__node-27e67931-3f20-4338-bee6-05cb92254401" class="react-flow__node react-flow__node-taskGraphNode nopan selectable">…</div> aka getByTestId('rf__node-27e67931-3f20-4338-bee6-05cb92254401')
+Error: expect(locator).toBeVisible() failed
+
+Locator: getByText('Phase 1 - Data & Canvas')
+Expected: visible
+Error: strict mode violation: getByText('Phase 1 - Data & Canvas') resolved to 2 elements:
+    1) <div class="text-sm font-semibold truncate w-36 overflow-hidden">Phase 1 - Data & Canvas</div> aka getByTestId('rf__node-1d59b1cb-6081-4d9e-b88c-4b55a883e8e3')
+    2) <div class="text-sm font-semibold truncate w-36 overflow-hidden">Phase 1 - Data & Canvas</div> aka getByTestId('rf__node-4e6e9ef5-8987-48aa-aafd-ba70ac8b5bd0')
 
 Call log:
-  - waiting for getByText('Phase 1 - Data & Canvas').first().locator('xpath=ancestor::div[contains(@class, "react-flow__node")]')
+  - Expect "toBeVisible" with timeout 5000ms
+  - waiting for getByText('Phase 1 - Data & Canvas')
 
 ```
 
@@ -36,61 +41,65 @@ Call log:
       - generic:
         - img:
           - generic:
-            - button "Edge from 53659eea-e37d-400c-b86b-d886b0738ad1 to c87aeb1b-02d8-4f2c-914a-096507ceaa3d"
-            - button "Edge from b84f1096-23cc-445e-afe7-b40d6cb3f061 to 2d0f35bd-0003-4707-b829-24ac5b5b9273"
-            - button "Edge from 27e67931-3f20-4338-bee6-05cb92254401 to 75d041ec-02ba-4937-a5e5-1081e0509a88"
-            - button "Edge from 1c580741-c3fe-4d1f-b140-cd2b791ed628 to 27e67931-3f20-4338-bee6-05cb92254401"
-            - button "Edge from 2d0f35bd-0003-4707-b829-24ac5b5b9273 to 53659eea-e37d-400c-b86b-d886b0738ad1"
-            - button "Edge from 75d041ec-02ba-4937-a5e5-1081e0509a88 to 43587097-e82a-4f47-8eab-898c9fc929b2"
+            - button "Edge from 1d59b1cb-6081-4d9e-b88c-4b55a883e8e3 to f55dfe0a-f0c1-4dbe-a647-a2c8e8b7117c"
+            - button "Edge from 012763f0-4ade-4392-bccd-44555c01bef4 to 1d59b1cb-6081-4d9e-b88c-4b55a883e8e3"
+            - button "Edge from f55dfe0a-f0c1-4dbe-a647-a2c8e8b7117c to fd7a0ef3-9bfc-4195-96d7-4df16c53e654"
+            - button "Edge from 4e6e9ef5-8987-48aa-aafd-ba70ac8b5bd0 to 1011d63a-319f-462b-904e-0dcc3fe01522"
+            - button "Edge from dd4d3156-7731-418a-ad76-b4253686400d to 4e6e9ef5-8987-48aa-aafd-ba70ac8b5bd0"
+            - button "Edge from 1011d63a-319f-462b-904e-0dcc3fe01522 to 7f448dc0-f8c4-4c60-b3dc-c021fc755759"
         - generic:
-          - button "project Task Graph Planner Delivery" [ref=e16]:
-            - generic [ref=e19]:
-              - generic [ref=e21]: project
-              - generic [ref=e22]: Task Graph Planner Delivery
-          - button "epic Phase 1 - Data & Canvas" [ref=e24]:
+          - button "Decompose Further project Task Graph Planner Delivery" [ref=e16]:
+            - generic [ref=e17]:
+              - generic [ref=e19]: Decompose Further
+              - generic [ref=e21]:
+                - generic [ref=e23]: project
+                - generic [ref=e24]: Task Graph Planner Delivery
+          - button "STALE task Dexie Implementation" [ref=e26]:
             - generic [ref=e27]:
-              - generic [ref=e29]: epic
-              - generic [ref=e30]: Phase 1 - Data & Canvas
-          - button "epic Phase 1 - Data & Canvas" [ref=e32]:
-            - generic [ref=e35]:
-              - generic [ref=e37]: epic
-              - generic [ref=e38]: Phase 1 - Data & Canvas
-          - button "leaf task Implement putNode wrap" [ref=e40]:
-            - generic [ref=e43]:
-              - generic [ref=e45]: leaf task
-              - generic [ref=e46]: Implement putNode wrap
-          - button "task STALE Dexie Implementation" [ref=e48]:
-            - generic [ref=e51]:
-              - generic [ref=e52]:
-                - generic [ref=e53]: task
-                - generic [ref=e54]: STALE
-              - generic [ref=e55]: Dexie Implementation
-          - button "task STALE Dexie Implementation" [ref=e57]:
-            - generic [ref=e60]:
-              - generic [ref=e61]:
-                - generic [ref=e62]: task
-                - generic [ref=e63]: STALE
-              - generic [ref=e64]: Dexie Implementation
-          - button "project Task Graph Planner Delivery" [ref=e66]:
-            - generic [ref=e69]:
-              - generic [ref=e71]: project
-              - generic [ref=e72]: Task Graph Planner Delivery
-          - button "leaf task Implement putNode wrap" [ref=e74]:
-            - generic [ref=e77]:
-              - generic [ref=e79]: leaf task
-              - generic [ref=e80]: Implement putNode wrap
-    - generic [ref=e82]:
-      - button "zoom in" [ref=e83] [cursor=pointer]:
-        - img [ref=e84]
-      - button "zoom out" [ref=e86] [cursor=pointer]:
-        - img [ref=e87]
-      - button "fit view" [ref=e89] [cursor=pointer]:
+              - generic [ref=e29]: STALE
+              - generic [ref=e31]:
+                - generic [ref=e33]: task
+                - generic [ref=e34]: Dexie Implementation
+          - button "epic Phase 1 - Data & Canvas" [ref=e36]:
+            - generic [ref=e39]:
+              - generic [ref=e41]: epic
+              - generic [ref=e42]: Phase 1 - Data & Canvas
+          - button "epic Phase 1 - Data & Canvas" [ref=e44]:
+            - generic [ref=e47]:
+              - generic [ref=e49]: epic
+              - generic [ref=e50]: Phase 1 - Data & Canvas
+          - button "leaf task Implement putNode wrap" [ref=e52]:
+            - generic [ref=e55]:
+              - generic [ref=e57]: leaf task
+              - generic [ref=e58]: Implement putNode wrap
+          - button "Decompose Further project Task Graph Planner Delivery" [ref=e60]:
+            - generic [ref=e61]:
+              - generic [ref=e63]: Decompose Further
+              - generic [ref=e65]:
+                - generic [ref=e67]: project
+                - generic [ref=e68]: Task Graph Planner Delivery
+          - button "STALE task Dexie Implementation" [ref=e70]:
+            - generic [ref=e71]:
+              - generic [ref=e73]: STALE
+              - generic [ref=e75]:
+                - generic [ref=e77]: task
+                - generic [ref=e78]: Dexie Implementation
+          - button "leaf task Implement putNode wrap" [ref=e80]:
+            - generic [ref=e83]:
+              - generic [ref=e85]: leaf task
+              - generic [ref=e86]: Implement putNode wrap
+    - generic [ref=e88]:
+      - button "zoom in" [ref=e89] [cursor=pointer]:
         - img [ref=e90]
-      - button "toggle interactivity" [ref=e92] [cursor=pointer]:
+      - button "zoom out" [ref=e92] [cursor=pointer]:
         - img [ref=e93]
-    - img "React Flow mini map" [ref=e96]
-    - img [ref=e105]
-    - link "React Flow attribution" [ref=e108] [cursor=pointer]:
+      - button "fit view" [ref=e95] [cursor=pointer]:
+        - img [ref=e96]
+      - button "toggle interactivity" [ref=e98] [cursor=pointer]:
+        - img [ref=e99]
+    - img "React Flow mini map" [ref=e102]
+    - img [ref=e111]
+    - link "React Flow attribution" [ref=e114] [cursor=pointer]:
       - /url: https://reactflow.dev
       - text: React Flow
 ```
@@ -120,40 +129,41 @@ Call log:
   20 |     await page.goto('/');
   21 |     
   22 |     // Explicitly target the Epic node via inner title mapping
-  23 |     const epicNodeText = page.getByText('Phase 1 - Data & Canvas').first();
-  24 |     await expect(epicNodeText).toBeVisible();
+  23 |     const epicNodeText = page.getByText('Phase 1 - Data & Canvas');
+> 24 |     await expect(epicNodeText).toBeVisible();
+     |                                ^ Error: expect(locator).toBeVisible() failed
   25 |     
-  26 |     // Double click the exact bounding container representing the React Flow node wrapper dynamically mapped
-> 27 |     await epicNodeText.locator('xpath=ancestor::div[contains(@class, "react-flow__node")]').click();
-     |                                                                                             ^ Error: locator.click: Error: strict mode violation: getByText('Phase 1 - Data & Canvas').first().locator('xpath=ancestor::div[contains(@class, "react-flow__node")]') resolved to 2 elements:
+  26 |     // Click exactly on the text to bypass any absolute wrapper overlays
+  27 |     await epicNodeText.click({ force: true });
   28 |     
   29 |     // Ensure slide out panel resolves natively mapping specific Radix boundaries/React states
-  30 |     await expect(page.getByText('Edit epic')).toBeVisible();
-  31 |     
-  32 |     // Type inside Size
-  33 |     const select = page.getByRole('combobox').first(); // There are two comboboxes (Size, Risk)
-  34 |     await select.selectOption('large');
-  35 | 
-  36 |     // Blur triggers save automatically
-  37 |     await page.getByText('Edit epic').click();
-  38 |     
-  39 |     // Open Sandbox validation ensuring local validation blocks payload missing requirements explicitly
-  40 |     await page.getByRole('button', { name: /Sandbox/i }).click();
-  41 | 
-  42 |     // Assert sandbox triggers missing component blocking natively
-  43 |     await expect(page.getByText('Preview §11.5 Golden Prompt rendering')).toBeVisible();
-  44 |   });
-  45 |   
-  46 |   test('List View topological toggling', async ({ page }) => {
-  47 |     await page.goto('/');
-  48 |     
-  49 |     // Transition to Leaf View
-  50 |     await page.getByRole('button', { name: /Leaf Task List/i }).click();
-  51 |     
-  52 |     await expect(page.getByText('Leaf Task Execution List')).toBeVisible();
-  53 |     // Validate Khan's alg output
-  54 |     await expect(page.getByText('Ready to Agent').first()).toBeVisible();
-  55 |   });
-  56 | });
-  57 | 
+  30 |     const panelHeader = page.getByRole('heading', { name: /Edit epic/i });
+  31 |     await expect(panelHeader).toBeVisible();
+  32 |     
+  33 |     // Type inside Size
+  34 |     const select = page.getByRole('combobox').first(); // There are two comboboxes (Size, Risk)
+  35 |     await select.selectOption('large');
+  36 | 
+  37 |     // Blur triggers save automatically by clicking the panel header directly
+  38 |     await panelHeader.click();
+  39 |     
+  40 |     // Open Sandbox validation ensuring local validation blocks payload missing requirements explicitly
+  41 |     await page.getByRole('button', { name: /Sandbox/i }).click();
+  42 | 
+  43 |     // Assert sandbox triggers missing component blocking natively
+  44 |     await expect(page.getByText('Preview §11.5 Golden Prompt rendering')).toBeVisible();
+  45 |   });
+  46 |   
+  47 |   test('List View topological toggling', async ({ page }) => {
+  48 |     await page.goto('/');
+  49 |     
+  50 |     // Transition to Leaf View
+  51 |     await page.getByRole('button', { name: /Leaf Task List/i }).click();
+  52 |     
+  53 |     await expect(page.getByText('Leaf Task Execution List')).toBeVisible();
+  54 |     // Validate Khan's alg output
+  55 |     await expect(page.getByText('Ready to Agent').first()).toBeVisible();
+  56 |   });
+  57 | });
+  58 | 
 ```
