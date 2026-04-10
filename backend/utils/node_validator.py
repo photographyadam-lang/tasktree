@@ -29,25 +29,41 @@ def validate_and_repair_node(node: Dict[str, Any]) -> Dict[str, Any]:
     if node.get('notes') is None:
         node['notes'] = ""
 
-    # Rejections (422 equivalents)
-    required_strings = ['title', 'type', 'parent_id', 'summary', 'objective', 'risk', 'size']
-    for field in required_strings:
+    # Repair Rule 6: Soft string fields — default to empty string if missing rather than hard-rejecting.
+    # LLMs frequently omit 'objective' and 'summary' when the context is implied. These are repairable.
+    for soft_field in ['objective', 'summary']:
+        if not node.get(soft_field):
+            node[soft_field] = ""
+
+    # Hard Rejections (422) — truly structural fields where an empty value makes the node unusable
+    hard_required = ['title', 'type', 'parent_id']
+    for field in hard_required:
         if not node.get(field):
             raise ValueError(f"Validation Failed: Missing required string field '{field}'")
+
+    # Repair Rule 7: Normalize risk — default invalid/None values to 'low'
+    valid_risks = ['low', 'medium', 'high']
+    raw_risk = str(node.get('risk', '')).lower().strip()
+    if raw_risk not in valid_risks:
+        node['risk'] = 'low'
+    else:
+        node['risk'] = raw_risk
+
+    # Repair Rule 8: Normalize size — default invalid/None values to 'medium'
+    valid_sizes = ['x-small', 'small', 'medium', 'large', 'x-large']
+    raw_size = str(node.get('size', '')).lower().strip()
+    if raw_size not in valid_sizes:
+        node['size'] = 'medium'
+    else:
+        node['size'] = raw_size
             
     if str(node.get('type')).lower() not in ['project', 'epic', 'task', 'leaf_task']:
         raise ValueError(f"Validation Failed: Invalid type '{node.get('type')}'")
         
-    if str(node.get('risk')).lower() not in ['low', 'medium', 'high']:
-        raise ValueError(f"Validation Failed: Invalid risk '{node.get('risk')}'")
-        
-    if str(node.get('size')).lower() not in ['x-small', 'small', 'medium', 'large', 'x-large']:
-        raise ValueError(f"Validation Failed: Invalid size '{node.get('size')}'")
-        
-    # Leaf task strict validations
+    # Leaf task strict validations (Repair Rule 9)
     if str(node.get('type')).lower() == 'leaf_task':
         for leaf_list in ['success_criteria', 'tests', 'validation_commands']:
             if not node.get(leaf_list) or not isinstance(node[leaf_list], list) or len(node[leaf_list]) == 0:
-                raise ValueError(f"Validation Failed: Leaf tasks must contain at least one {leaf_list}")
-                
+                node[leaf_list] = [f"Pending {leaf_list.replace('_', ' ')}"]
+
     return node

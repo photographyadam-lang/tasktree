@@ -100,6 +100,30 @@ export default function App() {
                }} className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition mr-2">Export MD</button>
 
                <button 
+                 onClick={async () => {
+                    const newRootId = crypto.randomUUID();
+                    await putNode({
+                        id: newRootId,
+                        type: 'project',
+                        title: 'New Project Blueprint',
+                        parent_id: '',
+                        summary: '',
+                        objective: '',
+                        risk: 'low',
+                        size: 'medium',
+                        scope: [], out_of_scope: [], prerequisites: [], depends_on: [],
+                        success_criteria: [], tests: [], validation_commands: [], notes: '',
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                        last_decomposed_at: null
+                    });
+                 }}
+                 className="px-4 py-1.5 text-sm bg-slate-200 text-slate-800 font-semibold rounded-md hover:bg-slate-300 transition"
+               >
+                 + New Project
+               </button>
+
+               <button 
                  onClick={() => setShowList(!showList)} 
                  className="px-4 py-1.5 text-sm bg-slate-800 text-white font-semibold rounded-md hover:bg-slate-700 transition"
                >

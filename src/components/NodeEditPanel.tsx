@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db, putNode } from '../db';
 import type { TaskNode } from '../types';
-import { X, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Sparkles, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { PromptSandbox } from './PromptSandbox';
 import { ModelSelector } from './ModelSelector';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
@@ -13,6 +13,7 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>('qwen3:14b');
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -42,6 +43,16 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
                      }, true);
                      
                      await db.nodes.bulkPut(result);
+                     
+                     // Create edges linking the current node to all newly generated child nodes
+                     const edgesPayload = result.map((child: any) => ({
+                         id: crypto.randomUUID(),
+                         source_id: node.id,
+                         target_id: child.id,
+                         relationship_type: 'depends_on' as const
+                     }));
+                     await db.edges.bulkPut(edgesPayload);
+
                      const updatedParent = { ...node, last_decomposed_at: new Date().toISOString() };
                      await putNode(updatedParent);
                      setNode(updatedParent);
@@ -58,6 +69,74 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
      triggerDecompose,
      openSandbox: () => setShowSandbox(true)
   });
+
+  const getExpectedChildType = (parentType: string) => {
+      switch (parentType) {
+          case 'project': return 'epic';
+          case 'epic': return 'task';
+          case 'task': return 'leaf_task';
+          default: return 'leaf_task';
+      }
+  };
+
+  const handleAddChild = async () => {
+      if (!node) return;
+      const childType = getExpectedChildType(node.type);
+      const childId = crypto.randomUUID();
+      const newChild: TaskNode = {
+          id: childId,
+          type: childType as any,
+          title: `New ${childType.replace('_', ' ')}`,
+          parent_id: node.id,
+          summary: '',
+          objective: '',
+          risk: 'low',
+          size: 'medium',
+          scope: [],
+          out_of_scope: [],
+          prerequisites: [],
+          depends_on: [],
+          success_criteria: [],
+          tests: [],
+          validation_commands: [],
+          notes: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          last_decomposed_at: null
+      };
+      await putNode(newChild);
+      await db.edges.put({
+          id: crypto.randomUUID(),
+          source_id: node.id,
+          target_id: childId,
+          relationship_type: 'depends_on' as const
+      });
+  };
+
+  const handleDelete = async () => {
+      if (!node) return;
+      const nodesToDelete = new Set<string>();
+      const edgesToDelete = new Set<string>();
+      
+      const findDescendants = async (parentId: string) => {
+          nodesToDelete.add(parentId);
+          const childEdges = await db.edges.where('source_id').equals(parentId).toArray();
+          for (const edge of childEdges) {
+              edgesToDelete.add(edge.id);
+              await findDescendants(edge.target_id);
+          }
+          const parentEdges = await db.edges.where('target_id').equals(parentId).toArray();
+          for (const edge of parentEdges) {
+              edgesToDelete.add(edge.id);
+          }
+      };
+      
+      await findDescendants(node.id);
+      await db.nodes.bulkDelete(Array.from(nodesToDelete));
+      await db.edges.bulkDelete(Array.from(edgesToDelete));
+      
+      onClose();
+  };
 
   if (!node) return null;
 
@@ -85,6 +164,13 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
           <h2 className="font-bold text-lg text-slate-800 tracking-tight">Edit <span className="bg-slate-200 px-2 py-0.5 rounded uppercase text-xs align-middle text-slate-600">{node.type}</span></h2>
           <div className="flex items-center gap-3">
             <button
+               onClick={() => setShowDeleteConfirm(true)}
+               className="flex items-center gap-1 text-xs bg-red-50 text-red-700 font-bold px-2 py-1.5 rounded-md hover:bg-red-100 border border-red-100 shadow-sm transition"
+               title="Delete Node"
+            >
+               <Trash2 size={14} />
+            </button>
+            <button
                onClick={() => setShowSandbox(true)}
                className="flex items-center gap-1.5 text-xs bg-indigo-50 text-indigo-700 font-bold px-3 py-1.5 rounded-md hover:bg-indigo-100 border border-indigo-100 shadow-sm transition"
             >
@@ -94,11 +180,21 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
           </div>
        </div>
 
-       {errorMessage && (
+        {errorMessage && (
          <div className="mx-5 mt-5 mb-0 bg-red-50 border-l-4 border-red-500 p-3 shadow-sm flex items-start gap-3 rounded-r-md min-h-[3rem]">
             <div className="font-bold text-red-700 text-sm whitespace-nowrap">⚠ Error</div>
             <div className="flex-1 overflow-hidden break-words text-sm text-red-900">{errorMessage}</div>
             <button className="text-red-400 hover:text-red-700 font-bold px-1" onClick={() => setErrorMessage(null)}>X</button>
+         </div>
+       )}
+
+       {showDeleteConfirm && (
+         <div className="mx-5 mt-5 mb-0 bg-red-100 border border-red-300 p-4 shadow-sm flex flex-col gap-3 rounded-md min-h-[3rem]">
+            <div className="font-bold text-red-800 text-sm">⚠ Warning: This will delete this node AND ALL its child nodes!</div>
+            <div className="flex gap-3 justify-end mt-1">
+               <button onClick={() => setShowDeleteConfirm(false)} className="px-3 py-1 text-sm text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded font-semibold transition">Cancel</button>
+               <button onClick={handleDelete} className="px-3 py-1 text-sm text-white bg-red-600 hover:bg-red-700 font-bold rounded transition">Yes, Delete</button>
+            </div>
          </div>
        )}
 
@@ -207,11 +303,20 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
            <div className="p-4 pt-2 flex gap-2">
               <button 
                 onClick={triggerDecompose}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-sm transition disabled:opacity-50"
+                className="flex-[2] bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-sm transition disabled:opacity-50"
                 disabled={isDecomposing}
               >
                 {isDecomposing ? 'Decomposing...' : 'Decompose (Local AI)'}
               </button>
+              {node.type !== 'leaf_task' && (
+                <button 
+                  onClick={handleAddChild}
+                  className="flex-[1] bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 px-2 rounded-md shadow-sm transition whitespace-nowrap overflow-hidden text-ellipsis"
+                  title="Manually add a child node"
+                >
+                  + Add Child
+                </button>
+              )}
            </div>
         </div>
 

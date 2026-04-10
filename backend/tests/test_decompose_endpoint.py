@@ -95,6 +95,44 @@ async def test_decompose_local_ollama_offline():
 
 @pytest.mark.anyio
 @respx.mock
+async def test_decompose_local_missing_parent_id_is_injected():
+    """parent_id omitted by LLM must be injected from the request nodePayload.id — not rejected."""
+    # Mock response where LLM forgot to set parent_id (common with small models)
+    response_without_parent_id = json.dumps([{
+        "title": "Write Unit Tests",
+        "type": "task",
+        # parent_id intentionally missing
+        "summary": "Write comprehensive unit tests",
+        "objective": "Ensure code quality",
+        "risk": "low",
+        "size": "small",
+        "scope": [],
+        "out_of_scope": [],
+        "prerequisites": [],
+        "depends_on": [],
+        "notes": "",
+    }])
+    respx.post("http://localhost:11434/api/generate").mock(
+        return_value=httpx.Response(200, json={"response": response_without_parent_id})
+    )
+
+    from main import app
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        r = await client.post("/llm/local", json={
+            "nodePayload": {"id": "the-real-parent-id", "title": "Auth Epic"},
+            "ancestorChain": [],
+            "userPrompt": "Decompose this",
+            "model": "qwen3:14b"
+        })
+
+    assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+    data = r.json()
+    assert data["nodes"][0]["parent_id"] == "the-real-parent-id", "parent_id should be injected from request"
+
+
+@pytest.mark.anyio
+@respx.mock
 async def test_decompose_local_bad_json_from_llm():
     """If LLM returns garbage JSON, return 422."""
     respx.post("http://localhost:11434/api/generate").mock(

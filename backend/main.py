@@ -118,7 +118,13 @@ async def process_local_ollama(request: DecomposeRequest):
                 
             data = response.json()
             raw_result = data.get("response", "")
-            return _process_and_validate_response(raw_result)
+            # Authoritative parent_id from the decomposed node — never trust the LLM to set this
+            parent_id = request.nodePayload.get('id', '')
+            # Enforce hierarchy: derive the correct child type from the parent's type
+            parent_type = str(request.nodePayload.get('type', '')).lower()
+            child_type_map = {'project': 'epic', 'epic': 'task', 'task': 'leaf_task'}
+            expected_child_type = child_type_map.get(parent_type, '')
+            return _process_and_validate_response(raw_result, parent_id, expected_child_type)
             
     except httpx.ConnectError:
         logger.error("Failed connecting to Ollama.")
@@ -165,7 +171,7 @@ async def process_cloud_anthropic(request: DecomposeRequest):
         raise HTTPException(status_code=500, detail=f"Cloud LLM Execution Failed: {str(e)}")
 
 
-def _process_and_validate_response(raw_text: str):
+def _process_and_validate_response(raw_text: str, parent_id: str = "", expected_child_type: str = ""):
     """Isolates the string mapping, parses the payload safely returning completely formatted dicts explicitly executing rules engine mappings."""
     # 1. Strip Markdown syntax guarantees JSON block exclusively mappings
     cleaned_json_string = clean_llm_json(raw_text)
@@ -185,6 +191,15 @@ def _process_and_validate_response(raw_text: str):
     validated_nodes = []
     for raw_node in payload:
         try:
+            # Inject authoritative parent_id — never rely on LLM to set it correctly
+            if parent_id:
+                raw_node['parent_id'] = parent_id
+            # Enforce hierarchy: override type to the correct child level regardless of what LLM returned
+            if expected_child_type:
+                actual = str(raw_node.get('type', '')).lower()
+                if actual != expected_child_type:
+                    logger.warning(f"LLM returned type '{actual}' but expected '{expected_child_type}' — correcting.")
+                    raw_node['type'] = expected_child_type
             repaired = validate_and_repair_node(raw_node)
             validated_nodes.append(repaired)
         except ValueError as ve:

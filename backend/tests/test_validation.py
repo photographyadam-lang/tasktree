@@ -43,17 +43,20 @@ def test_node_validator_rejects_missing_title():
             "size": "small"
         })
 
-def test_node_validator_rejects_leaf_task_without_commands():
-    with pytest.raises(ValueError, match="Leaf tasks must contain at least one validation_commands"):
-        validate_and_repair_node({
-            "title": "A Bug fix",
-            "type": "leaf_task",
-            "parent_id": "P1",
-            "summary": "Summary",
-            "objective": "Objective",
-            "risk": "low",
-            "size": "small",
-            "success_criteria": ["Criteria 1"],
-            "tests": ["Test 1"],
-            "validation_commands": []
-        })
+def test_node_validator_repairs_leaf_task_without_commands():
+    repaired = validate_and_repair_node({
+        "title": "A Bug fix",
+        "type": "leaf_task",
+        "parent_id": "P1",
+        "summary": "Summary",
+        "objective": "Objective",
+        "risk": "low",
+        "size": "small",
+        "success_criteria": [],
+        "tests": [],
+        "validation_commands": []
+    })
+    
+    assert "Pending success criteria" in repaired["success_criteria"][0]
+    assert "Pending tests" in repaired["tests"][0]
+    assert "Pending validation commands" in repaired["validation_commands"][0]
