@@ -1,5 +1,14 @@
 import type { NodeReviewReport } from './types/review';
 
+export interface ArchitectureContext {
+  stack?: string;
+  auth_pattern?: string;
+  deployment_target?: string;
+  key_constraints?: string;
+  naming_conventions?: string;
+  claude_rules?: string;
+}
+
 export interface TaskNode {
   id: string;
   title: string;
@@ -21,6 +30,7 @@ export interface TaskNode {
   updated_at: string;
   last_decomposed_at: string | null;
   last_review?: NodeReviewReport | null;
+  architecture?: ArchitectureContext | null;
 }
 
 export interface TaskEdge {

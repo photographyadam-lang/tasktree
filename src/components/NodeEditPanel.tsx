@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db, putNode } from '../db';
-import type { TaskNode } from '../types';
+import type { TaskNode, ArchitectureContext } from '../types';
 import type { NodeReviewReport } from '../types/review';
 import { X, Sparkles, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { PromptSandbox } from './PromptSandbox';
@@ -23,6 +23,7 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [regenProposal, setRegenProposal] = useState<Partial<TaskNode> | null>(null);
   const [regenError, setRegenError] = useState<string | null>(null);
+  const [archExpanded, setArchExpanded] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -31,6 +32,9 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
       if (active && n) {
         setNode(n);
         if (n.last_review) setReviewReport(n.last_review);
+        if (n.architecture && Object.values(n.architecture).some(v => v?.trim())) {
+          setArchExpanded(true);
+        }
       }
     };
     fetchNode();
@@ -87,7 +91,7 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
       const updated = { ...node, last_review: report };
       await putNode(updated);
       setNode(updated);
-    } catch (e: any) {
+    } catch {
       setReviewError('Review failed — try again');
     } finally {
       setIsReviewing(false);
@@ -104,7 +108,7 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
       // TODO: wire architecture_context from project node's architecture block (Phase B)
       const proposal = await regenNode({ node, instructions: regenInstruction, architecture_context: '' });
       setRegenProposal(proposal);
-    } catch (e: any) {
+    } catch {
       setRegenError('Generation failed — try again');
     } finally {
       setIsRegenerating(false);
@@ -350,6 +354,55 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
             />
           </div>
 
+          {node.type === 'project' && (
+            <div className="pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setArchExpanded(e => !e)}
+                className="w-full flex items-center justify-between text-xs font-semibold text-slate-600 hover:text-slate-800 transition"
+              >
+                <span className="flex items-center gap-1.5">
+                  Architecture Context
+                  <span className="font-normal text-slate-400 normal-case tracking-normal">ℹ️ Injected into all LLM prompts</span>
+                </span>
+                {archExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
+
+              {archExpanded && (
+                <div className="mt-3 space-y-3">
+                  {(
+                    [
+                      { key: 'stack',              label: 'Stack',               placeholder: 'e.g. React 19 + TypeScript + FastAPI + Dexie.js' },
+                      { key: 'auth_pattern',       label: 'Auth Pattern',        placeholder: 'e.g. HttpOnly cookie sessions, JWT' },
+                      { key: 'deployment_target',  label: 'Deployment Target',   placeholder: 'e.g. Vercel (frontend) + Railway (backend)' },
+                      { key: 'key_constraints',    label: 'Key Constraints',     placeholder: 'e.g. Local-first, no cloud DB, Anthropic API only' },
+                      { key: 'naming_conventions', label: 'Naming Conventions',  placeholder: 'e.g. camelCase components, snake_case Python' },
+                      { key: 'claude_rules',       label: 'Claude Rules',        placeholder: 'e.g. Stay in scope. Stop and ask on ambiguity.' },
+                    ] as Array<{ key: keyof ArchitectureContext; label: string; placeholder: string }>
+                  ).map(({ key, label, placeholder }) => (
+                    <div key={key} className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide block">{label}</label>
+                      <textarea
+                        className="w-full border p-2 rounded-md text-xs focus:ring-2 focus:ring-blue-500 outline-none transition resize-none h-8 focus:h-16"
+                        placeholder={placeholder}
+                        value={node.architecture?.[key] ?? ''}
+                        onChange={e => {
+                          const updated = { ...node, architecture: { ...node.architecture, [key]: e.target.value } };
+                          setNode(updated);
+                        }}
+                        onBlur={e => {
+                          const updated = { ...node, architecture: { ...node.architecture, [key]: e.target.value } };
+                          setNode(updated);
+                          putNode(updated);
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="pt-3 border-t space-y-3">
             <button
               data-testid="review-task-button"
@@ -508,7 +561,7 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
            </div>
         </div>
 
-        {showSandbox && <PromptSandbox node={node} onClose={() => setShowSandbox(false)} />}
+        {showSandbox && <PromptSandbox nodeId={nodeId} onClose={() => setShowSandbox(false)} />}
      </div>
   );
 }

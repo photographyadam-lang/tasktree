@@ -1,77 +1,120 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import type { TaskNode } from '../types';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
-import { renderPrompt } from '../utils/promptRenderer';
-import { getAncestorPath } from '../utils/graphQueries';
+import { db } from '../db';
+import { renderClaudeCodePrompt } from '../utils/renderClaudeCodePrompt';
+import { getArchitectureContext } from '../utils/architectureContext';
+import { getAncestorChain } from '../utils/getAncestorChain';
+import { calculateReadiness } from '../utils/calculateReadiness';
 
-// Validation Schema Mock per §11.6 + AC5
-function validateSchema(node: TaskNode) {
-  const missing = [];
-  if (!node.title) missing.push('title');
-  if (!node.summary) missing.push('summary');
-  if (!node.objective) missing.push('objective');
-  if (node.type === 'leaf_task') {
-    if (!node.success_criteria?.length) missing.push('success_criteria');
-    if (!node.tests?.length) missing.push('tests');
-    if (!node.validation_commands?.length) missing.push('validation_commands');
-  }
-  return missing;
-}
+const BADGE_LABEL: Record<string, string> = {
+  green: '🟢 Ready',
+  amber: '🟡 Refine',
+  red:   '🔴 Draft',
+};
 
-export function PromptSandbox({ node, onClose }: { node: TaskNode; onClose: () => void }) {
-  const [promptData, setPromptData] = useState<string>('');
-  const [missingFields, setMissingFields] = useState<string[]>([]);
+export function PromptSandbox({ nodeId, onClose }: { nodeId: string; onClose: () => void }) {
+  const node = useLiveQuery(() => db.nodes.get(nodeId), [nodeId]);
+  const [prompt, setPrompt] = useState('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    async function init() {
-      // Fetch ancestors gracefully avoiding failures on Root
-      const ancestors = await getAncestorPath(node.id);
-      
-      // Delimit context vs task metadata natively within renderer
-      const text = renderPrompt(node, ancestors);
-      
-      setPromptData(text);
-      setMissingFields(validateSchema(node));
+    if (!node) return;
+    let active = true;
+    async function build() {
+      const ancestors = await getAncestorChain(node!);
+      const projectNode = ancestors.find(a => a.type === 'project') ?? (node!.type === 'project' ? node! : null);
+      const archCtx = projectNode ? getArchitectureContext(projectNode) : '';
+      const rendered = renderClaudeCodePrompt(node!, ancestors, archCtx);
+      if (active) setPrompt(rendered);
     }
-    init();
+    build();
+    return () => { active = false; };
   }, [node]);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(prompt);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (!node) return null;
+
+  const { readiness } = calculateReadiness(node);
+  const lastReview = node.last_review ?? null;
+
+  const reviewSummary = (() => {
+    if (!lastReview) return null;
+    if (lastReview.passed) return '✅ Passed last review';
+    const blocking = lastReview.issues.filter(i => i.severity === 'blocking').length;
+    const total = lastReview.issues.length;
+    return `${total} issue${total !== 1 ? 's' : ''} found${blocking > 0 ? ` (${blocking} blocking)` : ''}`;
+  })();
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 z-[100] backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[650px] bg-white rounded-xl shadow-2xl p-6 z-[101] flex flex-col">
-          <div className="flex justify-between items-center border-b pb-4">
-            <div>
-              <Dialog.Title className="font-bold text-xl text-slate-800">Prompt Sandbox</Dialog.Title>
-              <Dialog.Description className="text-sm text-slate-500">Preview §11.5 Golden Prompt rendering</Dialog.Description>
+        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[820px] h-[700px] bg-white rounded-xl shadow-2xl z-[101] flex flex-col overflow-hidden">
+
+          {/* Header */}
+          <div className="flex items-start justify-between px-6 py-4 border-b bg-slate-50 shrink-0">
+            <div className="flex flex-col gap-0.5">
+              <Dialog.Title className="font-bold text-lg text-slate-800 leading-tight">
+                {node.title}
+              </Dialog.Title>
+              <Dialog.Description className="text-xs text-slate-500 sr-only">
+                Claude Code prompt sandbox for this node
+              </Dialog.Description>
             </div>
-            <Dialog.Close asChild>
-              <button className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><X size={20} /></button>
-            </Dialog.Close>
+            <div className="flex items-center gap-3">
+              <span
+                data-testid="sandbox-readiness-badge"
+                className="text-sm font-semibold"
+              >
+                {BADGE_LABEL[readiness]}
+              </span>
+              <Dialog.Close asChild>
+                <button className="p-1.5 hover:bg-slate-200 rounded-md text-slate-500 transition">
+                  <X size={18} />
+                </button>
+              </Dialog.Close>
+            </div>
           </div>
-          
-          {missingFields.length > 0 && (
-            <div className="bg-red-50 text-red-900 px-4 py-3 my-4 rounded-md border border-red-200">
-               <strong className="font-bold">Validation Blocked: </strong> 
-               Missing required fields before generation: <span className="font-mono bg-white px-2 rounded ml-2">{missingFields.join(', ')}</span>
+
+          {/* Review summary bar */}
+          {reviewSummary && (
+            <div className={`px-6 py-2 text-sm font-medium border-b shrink-0 ${
+              lastReview?.passed
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
+                : lastReview?.issues.some(i => i.severity === 'blocking')
+                  ? 'bg-red-50 text-red-800 border-red-100'
+                  : 'bg-amber-50 text-amber-800 border-amber-100'
+            }`}>
+              Reviewed: {reviewSummary}
             </div>
           )}
 
-          <div className="flex-1 overflow-auto mt-4 bg-slate-900 text-slate-50 p-5 rounded-lg font-mono text-sm shadow-inner whitespace-pre-wrap leading-relaxed">
-             {promptData}
+          {/* Prompt body */}
+          <div
+            data-testid="sandbox-prompt"
+            className="flex-1 overflow-auto bg-slate-900 text-slate-50 p-5 font-mono text-sm whitespace-pre-wrap leading-relaxed"
+          >
+            {prompt}
           </div>
-          
-          <div className="mt-4 flex justify-end gap-3 border-t pt-4">
-             <button onClick={onClose} className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-md">Cancel</button>
-             <button 
-               disabled={missingFields.length > 0} 
-               className="bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2 font-semibold rounded-md shadow-sm hover:bg-blue-700 transition"
-             >
-                Copy to Clipboard
-             </button>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t bg-slate-50 flex justify-end shrink-0">
+            <button
+              data-testid="sandbox-copy-button"
+              onClick={handleCopy}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-md shadow-sm transition"
+            >
+              {copied ? 'Copied!' : 'Copy Prompt'}
+            </button>
           </div>
+
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
