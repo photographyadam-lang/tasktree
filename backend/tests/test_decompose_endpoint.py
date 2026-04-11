@@ -41,7 +41,7 @@ DECOMPOSE_BODY = {
 @pytest.mark.anyio
 @respx.mock
 async def test_decompose_local_happy_path():
-    """Full pipeline: FastAPI /llm/local → mocked Ollama → validated node returned."""
+    """Full pipeline: FastAPI /llm/decompose → mocked Ollama → validated node returned."""
     respx.post("http://localhost:11434/api/generate").mock(
         return_value=httpx.Response(200, json=MOCK_OLLAMA_PAYLOAD)
     )
@@ -49,7 +49,7 @@ async def test_decompose_local_happy_path():
     from main import app
     transport = ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-        r = await client.post("/llm/local", json=DECOMPOSE_BODY)
+        r = await client.post("/llm/decompose", json=DECOMPOSE_BODY)
 
     assert r.status_code == 200
     data = r.json()
@@ -71,7 +71,7 @@ async def test_decompose_local_ollama_oom_error():
     from main import app
     transport = ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-        r = await client.post("/llm/local", json={**DECOMPOSE_BODY, "model": "qwen2.5-coder:32b"})
+        r = await client.post("/llm/decompose", json={**DECOMPOSE_BODY, "model": "qwen2.5-coder:32b"})
 
     assert r.status_code == 503
     assert "RAM" in r.json()["detail"] or "memory" in r.json()["detail"].lower()
@@ -88,7 +88,7 @@ async def test_decompose_local_ollama_offline():
     from main import app
     transport = ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-        r = await client.post("/llm/local", json=DECOMPOSE_BODY)
+        r = await client.post("/llm/decompose", json=DECOMPOSE_BODY)
 
     assert r.status_code == 503
 
@@ -119,7 +119,7 @@ async def test_decompose_local_missing_parent_id_is_injected():
     from main import app
     transport = ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-        r = await client.post("/llm/local", json={
+        r = await client.post("/llm/decompose", json={
             "nodePayload": {"id": "the-real-parent-id", "title": "Auth Epic"},
             "ancestorChain": [],
             "userPrompt": "Decompose this",
@@ -142,6 +142,6 @@ async def test_decompose_local_bad_json_from_llm():
     from main import app
     transport = ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-        r = await client.post("/llm/local", json=DECOMPOSE_BODY)
+        r = await client.post("/llm/decompose", json=DECOMPOSE_BODY)
 
     assert r.status_code == 422

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchModels, type OllamaModel, type ModelsResponse } from '../api';
-import { Cpu, MemoryStick } from 'lucide-react';
+import { Cpu, MemoryStick, Sparkles } from 'lucide-react';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -69,6 +69,7 @@ export function ModelSelector({ selectedModel, onModelChange }: ModelSelectorPro
         {data.models.map((m: OllamaModel) => {
           const isSelected = m.name === selectedModel;
           const canRun = m.fits_in_ram;
+          const isCloud = m.size_gb === 0;
           return (
             <button
               key={m.name}
@@ -83,13 +84,13 @@ export function ModelSelector({ selectedModel, onModelChange }: ModelSelectorPro
                 }`}
             >
               <span className="flex items-center gap-1.5 min-w-0">
-                <Cpu size={12} className="shrink-0" />
+                {isCloud ? <Sparkles size={12} className="shrink-0 text-amber-500" /> : <Cpu size={12} className="shrink-0" />}
                 <span className="font-mono truncate">{m.name}</span>
               </span>
               <span className="flex items-center gap-1.5 shrink-0">
-                <span className="font-semibold">{m.size_gb} GB</span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${canRun ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
-                  {canRun ? 'FITS' : 'TOO LARGE'}
+                {!isCloud && <span className="font-semibold">{m.size_gb} GB</span>}
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${canRun ? (isCloud ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700') : 'bg-red-100 text-red-600'}`}>
+                  {isCloud ? (canRun ? 'CLOUD' : 'API KEY REQ') : (canRun ? 'FITS' : 'TOO LARGE')}
                 </span>
                 {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
               </span>

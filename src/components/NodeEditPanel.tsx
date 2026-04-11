@@ -12,7 +12,7 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
   const [showSandbox, setShowSandbox] = useState(false);
   const [isDecomposing, setIsDecomposing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<string>('qwen3:14b');
+  const [selectedModel, setSelectedModel] = useState<string>('gemma4:e2b');
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isReviewing, setIsReviewing] = useState(false);
@@ -56,7 +56,7 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
                          ancestorChain: resolvedChain,
                          userPrompt: await promptStr,
                          model: selectedModel,
-                     }, true);
+                     });
                      
                      await db.nodes.bulkPut(result);
                      
@@ -86,7 +86,7 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
     setReviewReport(null);
     try {
       const { reviewNode } = await import('../api');
-      const report = await reviewNode(node);
+      const report = await reviewNode(node, selectedModel);
       setReviewReport(report);
       const updated = { ...node, last_review: report };
       await putNode(updated);
@@ -106,7 +106,7 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
     try {
       const { regenNode } = await import('../api');
       // TODO: wire architecture_context from project node's architecture block (Phase B)
-      const proposal = await regenNode({ node, instructions: regenInstruction, architecture_context: '' });
+      const proposal = await regenNode({ node, instructions: regenInstruction, architecture_context: '', model: selectedModel });
       setRegenProposal(proposal);
     } catch {
       setRegenError('Generation failed — try again');
@@ -547,7 +547,7 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
                 className="flex-[2] bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-sm transition disabled:opacity-50"
                 disabled={isDecomposing}
               >
-                {isDecomposing ? 'Decomposing...' : 'Decompose (Local AI)'}
+                {isDecomposing ? 'Decomposing...' : 'Decompose Task'}
               </button>
               {node.type !== 'leaf_task' && (
                 <button 

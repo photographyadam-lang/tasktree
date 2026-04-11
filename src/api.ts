@@ -34,8 +34,8 @@ export async function fetchModels(): Promise<ModelsResponse> {
   return response.json();
 }
 
-export async function decomposeNode(payload: DecomposePayload, isLocal: boolean = true): Promise<TaskNode[]> {
-  const endpoint = isLocal ? 'http://localhost:8000/llm/local' : 'http://localhost:8000/llm/cloud';
+export async function decomposeNode(payload: DecomposePayload): Promise<TaskNode[]> {
+  const endpoint = 'http://localhost:8000/llm/decompose';
   
   let response: Response;
   try {
@@ -63,6 +63,7 @@ export interface RegenPayload {
   node: TaskNode;
   instructions: string;
   architecture_context: string;
+  model: string;
 }
 
 export async function regenNode(payload: RegenPayload): Promise<Partial<TaskNode>> {
@@ -77,24 +78,26 @@ export async function regenNode(payload: RegenPayload): Promise<Partial<TaskNode
     throw new Error('Generation failed — try again');
   }
   if (!response.ok) {
-    throw new Error('Generation failed — try again');
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.detail || 'Generation failed — try again');
   }
   return response.json();
 }
 
-export async function reviewNode(node: TaskNode): Promise<NodeReviewReport> {
+export async function reviewNode(node: TaskNode, model: string): Promise<NodeReviewReport> {
   let response: Response;
   try {
     response = await fetch('http://localhost:8000/llm/review', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ node }),
+      body: JSON.stringify({ node, model }),
     });
   } catch {
     throw new Error('Review failed — try again');
   }
   if (!response.ok) {
-    throw new Error('Review failed — try again');
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.detail || 'Review failed — try again');
   }
   return response.json();
 }

@@ -42,11 +42,12 @@ class DecomposeRequest(BaseModel):
     nodePayload: dict
     ancestorChain: list
     userPrompt: str
-    model: str = "qwen3:14b"  # User-selected model, with sensible default
+    model: str = "gemma4:e2b"  # User-selected model, updated default
+
 
 @app.get("/api/models")
 async def get_available_models():
-    """Returns available Ollama models with memory requirements and current system RAM."""
+    """Returns available models, including Claude and Ollama models."""
     ollama_url = os.getenv("VITE_OLLAMA_BASE_URL", "http://localhost:11434")
     
     # Get current system memory
@@ -54,13 +55,15 @@ async def get_available_models():
     available_gb = mem.available / (1024 ** 3)
     total_gb = mem.total / (1024 ** 3)
     
+    models = []
+    
+    # Always try to fetch Ollama
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{ollama_url}/api/tags", timeout=5.0)
             response.raise_for_status()
             data = response.json()
             
-            models = []
             for m in data.get("models", []):
                 size_bytes = m.get("size", 0)
                 size_gb = size_bytes / (1024 ** 3)
@@ -70,47 +73,50 @@ async def get_available_models():
                     "size_gb": round(size_gb, 1),
                     "fits_in_ram": fits,
                 })
-            
-            # Sort: fits-in-RAM first, then by size ascending
-            models.sort(key=lambda x: (not x["fits_in_ram"], x["size_gb"]))
-            
-            return {
-                "models": models,
-                "system_ram_available_gb": round(available_gb, 1),
-                "system_ram_total_gb": round(total_gb, 1),
-            }
     except httpx.ConnectError:
-        raise HTTPException(status_code=503, detail="Ollama is not running. Start Ollama and try again.")
+        logger.warning("Ollama is not running. Only showing Claude if available.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to query Ollama models: {str(e)}")
+        logger.warning(f"Failed to query Ollama models: {str(e)}")
 
+    # Sort Ollama: fits-in-RAM first, then by size ascending
+    models.sort(key=lambda x: (not x["fits_in_ram"], x["size_gb"]))
 
-@app.post("/llm/local")
-async def process_local_ollama(request: DecomposeRequest):
-    """Hits local Ollama explicitly handling 503 fallback routing securely."""
-    logger.info("Executing POST /llm/local (Ollama)")
-    ollama_url = os.getenv("VITE_OLLAMA_BASE_URL", "http://localhost:11434")
-    ollama_model = request.model  # Use user-selected model from request
+    # Add Claude to the top
+    models.insert(0, {
+        "name": CLOUD_MODEL,
+        "size_gb": 0,
+        "fits_in_ram": bool(ANTHROPIC_API_KEY)
+    })
     
+    return {
+        "models": models,
+        "system_ram_available_gb": round(available_gb, 1),
+        "system_ram_total_gb": round(total_gb, 1),
+    }
+
+
+async def _invoke_ollama(model: str, system_prompt: str, user_prompt: str, temperature: float = 0.2):
+    """Encapsulates Ollama generation."""
+    ollama_url = os.getenv("VITE_OLLAMA_BASE_URL", "http://localhost:11434")
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{ollama_url}/api/generate",
                 json={
-                    "model": ollama_model,
-                    "prompt": request.userPrompt,
+                    "model": model,
+                    "system": system_prompt,
+                    "prompt": user_prompt,
                     "stream": False,
-                    "keep_alive": 0,  # Immediately drop model from RAM after execution
-                    "options": {"temperature": 0.2}
+                    "keep_alive": 0,
+                    "options": {"temperature": temperature}
                 },
                 timeout=180.0
             )
             
             if response.status_code == 404:
-                raise HTTPException(status_code=404, detail=f"Ollama model '{ollama_model}' not found. Run: ollama pull {ollama_model}")
+                raise HTTPException(status_code=404, detail=f"Ollama model '{model}' not found. Run: ollama pull {model}")
             
             if not response.is_success:
-                # Try to surface a meaningful reason (e.g. OOM) from the Ollama error body
                 try:
                     err_body = response.json()
                     err_msg = err_body.get("error", response.text)
@@ -118,36 +124,19 @@ async def process_local_ollama(request: DecomposeRequest):
                     err_msg = response.text
                 logger.error(f"Ollama error ({response.status_code}): {err_msg}")
                 if "memory" in err_msg.lower():
-                    raise HTTPException(status_code=503, detail=f"Model '{ollama_model}' requires more RAM than is available. Select a smaller model.")
+                    raise HTTPException(status_code=503, detail=f"Model '{model}' requires more RAM than is available.")
                 raise HTTPException(status_code=502, detail=f"Ollama error: {err_msg}")
                 
-            data = response.json()
-            raw_result = data.get("response", "")
-            # Authoritative parent_id from the decomposed node — never trust the LLM to set this
-            parent_id = request.nodePayload.get('id', '')
-            # Enforce hierarchy: derive the correct child type from the parent's type
-            parent_type = str(request.nodePayload.get('type', '')).lower()
-            child_type_map = {'project': 'epic', 'epic': 'task', 'task': 'leaf_task'}
-            expected_child_type = child_type_map.get(parent_type, '')
-            return _process_and_validate_response(raw_result, parent_id, expected_child_type)
-            
+            return response.json().get("response", "")
     except httpx.ConnectError:
         logger.error("Failed connecting to Ollama.")
         raise HTTPException(status_code=503, detail="Start Ollama and try again.")
-    except HTTPException:
-        raise  # Let 422/503/404 from _process_and_validate_response propagate unchanged
-    except Exception as e:
-        logger.error(f"Local LLM Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Local LLM Execution Failed: {str(e)}")
 
 
-@app.post("/llm/cloud")
-async def process_cloud_anthropic(request: DecomposeRequest):
-    """Reaches robust APIs ensuring highest parsing parameters mapped consistently."""
-    logger.info("Executing POST /llm/cloud (Anthropic)")
-    
+async def _invoke_anthropic(model: str, system_prompt: str, user_prompt: str, temperature: float = 0.2, max_tokens: int = 4096):
+    """Encapsulates Anthropic Claude generation."""
     if not ANTHROPIC_API_KEY:
-        raise HTTPException(status_code=503, detail="Server misconfigured: VITE_ANTHROPIC_API_KEY is required for Cloud Decomposition! Update .env.")
+        raise HTTPException(status_code=503, detail="Server misconfigured: VITE_ANTHROPIC_API_KEY is required.")
     
     try:
         async with httpx.AsyncClient() as client:
@@ -159,21 +148,61 @@ async def process_cloud_anthropic(request: DecomposeRequest):
                     "content-type": "application/json"
                 },
                 json={
-                    "model": "claude-3-5-sonnet-20241022",
-                    "max_tokens": 4096,
-                    "temperature": 0.2,
-                    "messages": [{"role": "user", "content": request.userPrompt}]
+                    "model": CLOUD_MODEL,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "system": system_prompt,
+                    "messages": [{"role": "user", "content": user_prompt}]
                 },
                 timeout=180.0
             )
             response.raise_for_status()
             data = response.json()
-            raw_result = data.get("content", [{}])[0].get("text", "")
-            return _process_and_validate_response(raw_result)
-            
+            return data.get("content", [{}])[0].get("text", "")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Anthropic API error: {e.response.status_code} {e.response.text}")
+        raise HTTPException(status_code=502, detail=f"Anthropic API error: {e.response.status_code}")
     except Exception as e:
-        logger.error(f"Cloud LLM Error: {str(e)}")
+        logger.error(f"Anthropic error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Cloud LLM Execution Failed: {str(e)}")
+
+
+@app.post("/llm/decompose")
+async def decompose_node(request: DecomposeRequest):
+    """Routes the decompose request to right Model internally."""
+    logger.info(f"Executing POST /llm/decompose with model: {request.model}")
+    
+    try:
+        if request.model == CLOUD_MODEL:
+            # Using Cloud
+            raw_result = await _invoke_anthropic(
+                model=CLOUD_MODEL,
+                system_prompt="",
+                user_prompt=request.userPrompt,
+                temperature=0.2,
+                max_tokens=4096
+            )
+        else:
+            # Using Local
+            raw_result = await _invoke_ollama(
+                model=request.model,
+                system_prompt="",
+                user_prompt=request.userPrompt,
+                temperature=0.2
+            )
+            
+        parent_id = request.nodePayload.get('id', '')
+        parent_type = str(request.nodePayload.get('type', '')).lower()
+        child_type_map = {'project': 'epic', 'epic': 'task', 'task': 'leaf_task'}
+        expected_child_type = child_type_map.get(parent_type, '')
+        
+        return _process_and_validate_response(raw_result, parent_id, expected_child_type)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Decompose LLM Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Decompose Execution Failed: {str(e)}")
 
 
 REVIEW_SYSTEM_PROMPT = """You are a senior software architect reviewing a task specification for clarity and completeness.
@@ -202,15 +231,13 @@ Rules:
 
 class ReviewRequest(BaseModel):
     node: dict  # the full node object from Dexie
+    model: str = "gemma4:e2b"
 
 
 @app.post("/llm/review")
 async def review_node(request: ReviewRequest):
     """Runs a structured LLM review of a node spec and returns a NodeReviewReport."""
-    logger.info("Executing POST /llm/review (Anthropic)")
-
-    if not ANTHROPIC_API_KEY:
-        raise HTTPException(status_code=503, detail="Server misconfigured: VITE_ANTHROPIC_API_KEY is required for node review.")
+    logger.info(f"Executing POST /llm/review with model: {request.model}")
 
     node = request.node
     user_prompt = f"""Review this task specification and return a NodeReviewReport JSON object.
@@ -232,29 +259,23 @@ Identify any gaps that would cause an AI coding agent to produce incorrect, inco
 Return only the JSON object."""
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": ANTHROPIC_API_KEY,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": CLOUD_MODEL,
-                    "max_tokens": 2048,
-                    "temperature": 0.0,
-                    "system": REVIEW_SYSTEM_PROMPT,
-                    "messages": [{"role": "user", "content": user_prompt}],
-                },
-                timeout=60.0,
+        if request.model == CLOUD_MODEL:
+            raw_text = await _invoke_anthropic(
+                model=CLOUD_MODEL,
+                system_prompt=REVIEW_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                temperature=0.0,
+                max_tokens=2048
             )
-            response.raise_for_status()
-            data = response.json()
-            raw_text = data.get("content", [{}])[0].get("text", "")
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Anthropic API error: {e.response.status_code} {e.response.text}")
-        raise HTTPException(status_code=502, detail=f"Anthropic API error: {e.response.status_code}")
+        else:
+            raw_text = await _invoke_ollama(
+                model=request.model,
+                system_prompt=REVIEW_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                temperature=0.0
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Review LLM error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Review request failed: {str(e)}")
@@ -288,15 +309,13 @@ class RegenRequest(BaseModel):
     node: dict
     instructions: str
     architecture_context: str = ""
+    model: str = "gemma4:e2b"
 
 
 @app.post("/llm/regen")
 async def regen_node(request: RegenRequest):
     """Regenerates specific node fields based on developer instructions."""
-    logger.info("Executing POST /llm/regen (Anthropic)")
-
-    if not ANTHROPIC_API_KEY:
-        raise HTTPException(status_code=503, detail="Server misconfigured: VITE_ANTHROPIC_API_KEY is required for regen.")
+    logger.info(f"Executing POST /llm/regen with model: {request.model}")
 
     node = request.node
     instructions = request.instructions
@@ -325,29 +344,23 @@ Developer instruction: {instructions}
 Return only the JSON object containing the fields you changed. Do not explain."""
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": ANTHROPIC_API_KEY,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": CLOUD_MODEL,
-                    "max_tokens": 2048,
-                    "temperature": 0.3,
-                    "system": REGEN_SYSTEM_PROMPT,
-                    "messages": [{"role": "user", "content": user_prompt}],
-                },
-                timeout=60.0,
+        if request.model == CLOUD_MODEL:
+            raw_text = await _invoke_anthropic(
+                model=CLOUD_MODEL,
+                system_prompt=REGEN_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                temperature=0.3,
+                max_tokens=2048
             )
-            response.raise_for_status()
-            data = response.json()
-            raw_text = data.get("content", [{}])[0].get("text", "")
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Anthropic API error: {e.response.status_code} {e.response.text}")
-        raise HTTPException(status_code=502, detail=f"Anthropic API error: {e.response.status_code}")
+        else:
+            raw_text = await _invoke_ollama(
+                model=request.model,
+                system_prompt=REGEN_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                temperature=0.3
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Regen LLM error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Regen request failed: {str(e)}")
