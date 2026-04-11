@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ReactFlowProvider } from 'reactflow';
 import { db, putNode } from './db';
 import { GraphCanvas } from './components/GraphCanvas';
@@ -10,6 +10,44 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [showList, setShowList] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const text = e.target?.result as string;
+        const graph = JSON.parse(text);
+        if (graph.nodes && graph.edges) {
+          await db.nodes.clear();
+          await db.edges.clear();
+          setActiveNodeId(null);
+          
+          if (graph.nodes.length) await db.nodes.bulkAdd(graph.nodes);
+          if (graph.edges.length) await db.edges.bulkAdd(graph.edges);
+        } else {
+          alert('Invalid graph file format.');
+        }
+      } catch (err) {
+        console.error('Failed to load graph:', err);
+        alert('Failed to parse the file.');
+      }
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleClear = async () => {
+    if (confirm('Are you sure you want to clear all nodes and edges? This cannot be undone.')) {
+        await db.nodes.clear();
+        await db.edges.clear();
+        setActiveNodeId(null);
+    }
+  };
 
   useEffect(() => {
     async function initMockData() {
@@ -87,8 +125,13 @@ export default function App() {
                   a.href = url;
                   a.download = 'task-graph.json';
                   a.click();
-               }} className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition">Export JSON</button>
+               }} className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition">Save JSON</button>
                
+               <input type="file" accept=".json" style={{ display: 'none' }} ref={fileInputRef} onChange={handleLoad} />
+               <button onClick={() => fileInputRef.current?.click()} className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition">Load</button>
+
+               <button onClick={handleClear} className="text-xs font-semibold text-red-500 hover:text-red-700 transition">New / Clear</button>
+
                <button onClick={async () => {
                   const md = await exportToMarkdown();
                   const blob = new Blob([md], { type: 'text/markdown' });

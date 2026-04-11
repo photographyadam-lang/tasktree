@@ -174,4 +174,130 @@ test.describe('Task Graph Planner E2E', () => {
     await expect(sandboxPrompt).toContainText('## Task:');
     await expect(page.getByTestId('sandbox-copy-button')).toBeVisible();
   });
+
+  // ─── Phase C tests: Import / Export ──────────────────────────────────────
+
+  test('node export — downloads a .yaml file containing node title', async ({ page }) => {
+    const anyNode = page.locator('.react-flow__node').first();
+    await expect(anyNode).toBeVisible({ timeout: 8000 });
+    await anyNode.click({ force: true });
+    await expect(page.getByRole('heading', { name: /Edit/i })).toBeVisible();
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('export-yaml-button').click(),
+    ]);
+
+    expect(download.suggestedFilename()).toMatch(/\.yaml$/);
+    const path = await download.path();
+    const { readFileSync } = await import('fs');
+    const content = path ? readFileSync(path, 'utf-8') : '';
+    expect(content).toContain('title:');
+    expect(content).toContain('type:');
+  });
+
+  test('node export-with-prompt — downloads a .txt file containing coaching markers', async ({ page }) => {
+    const anyNode = page.locator('.react-flow__node').first();
+    await expect(anyNode).toBeVisible({ timeout: 8000 });
+    await anyNode.click({ force: true });
+    await expect(page.getByRole('heading', { name: /Edit/i })).toBeVisible();
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('export-prompt-button').click(),
+    ]);
+
+    expect(download.suggestedFilename()).toMatch(/\.txt$/);
+    const path = await download.path();
+    const { readFileSync } = await import('fs');
+    const content = path ? readFileSync(path, 'utf-8') : '';
+    expect(content).toContain('---IMPORT-START---');
+    expect(content).toContain('NODE COACHING SESSION');
+  });
+
+  test('node import — happy path overwrites node fields and shows success banner', async ({ page }) => {
+    const anyNode = page.locator('.react-flow__node').first();
+    await expect(anyNode).toBeVisible({ timeout: 8000 });
+    await anyNode.click({ force: true });
+    await expect(page.getByRole('heading', { name: /Edit/i })).toBeVisible();
+
+    // Build a valid YAML for a task node (mock data default type may be 'project' for first node)
+    // Use the second node which is an epic
+    const epicNode = page.locator('[data-testid="node-card-epic"]').first();
+    await epicNode.click({ force: true });
+    await expect(page.getByRole('heading', { name: /Edit/i })).toBeVisible();
+
+    const importYaml = [
+      'type: epic',
+      'title: "Imported Epic Title"',
+      'summary: "Imported summary"',
+      'objective: "Imported objective"',
+      'risk: low',
+      'size: small',
+    ].join('\n');
+
+    await page.getByTestId('import-file-input').setInputFiles({
+      name: 'test-import.yaml',
+      mimeType: 'text/yaml',
+      buffer: Buffer.from(importYaml),
+    });
+
+    // Success banner should appear
+    await expect(page.getByTestId('import-success-banner')).toBeVisible({ timeout: 3000 });
+    // Title field should be updated
+    await expect(page.getByRole('textbox').first()).toHaveValue('Imported Epic Title');
+  });
+
+  test('node import — type mismatch shows error banner', async ({ page }) => {
+    const epicNode = page.locator('[data-testid="node-card-epic"]').first();
+    await expect(epicNode).toBeVisible({ timeout: 8000 });
+    await epicNode.click({ force: true });
+    await expect(page.getByRole('heading', { name: /Edit/i })).toBeVisible();
+
+    // Try to import a 'task' YAML into an 'epic' node
+    const wrongTypeYaml = [
+      'type: task',
+      'title: "Wrong Type"',
+      'summary: "s"',
+      'objective: "o"',
+      'risk: low',
+      'size: small',
+    ].join('\n');
+
+    await page.getByTestId('import-file-input').setInputFiles({
+      name: 'wrong-type.yaml',
+      mimeType: 'text/yaml',
+      buffer: Buffer.from(wrongTypeYaml),
+    });
+
+    // Error banner must appear mentioning type
+    const errorBanner = page.locator('text=/Type mismatch|type/i').first();
+    await expect(errorBanner).toBeVisible({ timeout: 3000 });
+  });
+
+  test('node import — invalid risk value shows error banner', async ({ page }) => {
+    const epicNode = page.locator('[data-testid="node-card-epic"]').first();
+    await expect(epicNode).toBeVisible({ timeout: 8000 });
+    await epicNode.click({ force: true });
+    await expect(page.getByRole('heading', { name: /Edit/i })).toBeVisible();
+
+    const badYaml = [
+      'type: epic',
+      'title: "Epic"',
+      'summary: "s"',
+      'objective: "o"',
+      'risk: ultra',
+      'size: small',
+    ].join('\n');
+
+    await page.getByTestId('import-file-input').setInputFiles({
+      name: 'bad-risk.yaml',
+      mimeType: 'text/yaml',
+      buffer: Buffer.from(badYaml),
+    });
+
+    const errorBanner = page.locator('text=/risk/i').first();
+    await expect(errorBanner).toBeVisible({ timeout: 3000 });
+  });
 });
+

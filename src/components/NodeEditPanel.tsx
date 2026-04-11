@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { db, putNode } from '../db';
 import type { TaskNode, ArchitectureContext } from '../types';
 import type { NodeReviewReport } from '../types/review';
-import { X, Sparkles, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { X, Sparkles, ChevronDown, ChevronUp, Trash2, Download, Upload, FileText } from 'lucide-react';
 import { PromptSandbox } from './PromptSandbox';
 import { ModelSelector } from './ModelSelector';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { nodeToYaml, yamlToNode, buildExportWithPrompt, YamlImportError } from '../utils/nodeYaml';
 
 export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: () => void }) {
   const [node, setNode] = useState<TaskNode | null>(null);
@@ -24,6 +25,9 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
   const [regenProposal, setRegenProposal] = useState<Partial<TaskNode> | null>(null);
   const [regenError, setRegenError] = useState<string | null>(null);
   const [archExpanded, setArchExpanded] = useState(false);
+  const [importSuccess, setImportSuccess] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const archImportRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -203,6 +207,123 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
 
   if (!node) return null;
 
+  // ── Import / Export handlers ────────────────────────────────────────────
+
+  const handleExport = () => {
+    const content = nodeToYaml(node);
+    const blob = new Blob([content], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `node-${node.id.slice(0, 8)}.yaml`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportWithPrompt = () => {
+    const content = buildExportWithPrompt(node);
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `node-${node.id.slice(0, 8)}-coaching-prompt.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportArchPrompt = async () => {
+    const allNodes = await db.nodes.toArray();
+    const nodeDescriptions = allNodes.map(n => `- [${n.type}] ${n.title}: ${n.summary}`).join('\n');
+    const prompt = `You are an expert software architect. Below is a list of all nodes in our task graph planner:
+
+${nodeDescriptions}
+
+Based on this project structure, please propose a clear Architecture Context. 
+The Architecture Context is injected into all LLM prompts to provide technical guidance.
+It consists of 6 fields:
+1. stack
+2. auth_pattern
+3. deployment_target
+4. key_constraints
+5. naming_conventions
+6. claude_rules
+
+Please return YOUR ENTIRE RESPONSE as a single valid JSON object exactly matching this format, with no markdown formatting or extra text:
+{
+  "stack": "your suggestion",
+  "auth_pattern": "your suggestion",
+  "deployment_target": "your suggestion",
+  "key_constraints": "your suggestion",
+  "naming_conventions": "your suggestion",
+  "claude_rules": "your suggestion"
+}
+`;
+
+    const blob = new Blob([prompt], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `architecture-prompt.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportArchFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !node) return;
+    e.target.value = '';
+    const raw = await file.text();
+    try {
+        const extract = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/;
+        const match = raw.match(extract);
+        const jsonStr = match ? match[1] : raw;
+        
+        const parsed = JSON.parse(jsonStr);
+        if (typeof parsed === 'object' && parsed !== null) {
+            const updated = { 
+              ...node, 
+              architecture: { 
+                 stack: parsed.stack || node.architecture?.stack || '',
+                 auth_pattern: parsed.auth_pattern || node.architecture?.auth_pattern || '',
+                 deployment_target: parsed.deployment_target || node.architecture?.deployment_target || '',
+                 key_constraints: parsed.key_constraints || node.architecture?.key_constraints || '',
+                 naming_conventions: parsed.naming_conventions || node.architecture?.naming_conventions || '',
+                 claude_rules: parsed.claude_rules || node.architecture?.claude_rules || ''
+              } 
+            };
+            setNode(updated);
+            await putNode(updated);
+            setArchExpanded(true);
+        } else {
+            throw new Error("Invalid object format.");
+        }
+    } catch(err) {
+        setErrorMessage("Failed to parse Architecture Context. Ensure the file contains valid JSON.");
+    }
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset so same file can be re-imported
+    e.target.value = '';
+    const raw = await file.text();
+    try {
+      const imported = yamlToNode(raw, node);
+      await putNode(imported);
+      setNode(imported);
+      setReviewReport(null); // last_review nulled on import
+      setImportSuccess(true);
+      setTimeout(() => setImportSuccess(false), 2000);
+    } catch (err) {
+      if (err instanceof YamlImportError) {
+        setErrorMessage(`Import failed: ${err.message}. ${err.hint}`);
+      } else {
+        setErrorMessage('Import failed — unexpected error.');
+      }
+    }
+  };
+
   // AC 2: Auto-save on blur natively executes Dexie put immediately
   const handleBlur = async (field: keyof TaskNode, stringValue: string) => {
     // Basic array separation logic for MVP mock textareas
@@ -229,13 +350,30 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
 
   return (
     <div className="absolute top-0 right-0 h-full w-[450px] bg-white border-l shadow-2xl z-50 flex flex-col transform transition-transform">
+       {/* Hidden file input for YAML import */}
+       <input
+         ref={importFileRef}
+         type="file"
+         accept=".yaml,.yml"
+         className="hidden"
+         data-testid="import-file-input"
+         onChange={handleImportFile}
+       />
+       <input
+         ref={archImportRef}
+         type="file"
+         accept=".json,.txt"
+         className="hidden"
+         onChange={handleImportArchFile}
+       />
        <div className="flex items-center justify-between p-4 border-b bg-slate-50">
           <h2 className="font-bold text-lg text-slate-800 tracking-tight">Edit <span className="bg-slate-200 px-2 py-0.5 rounded uppercase text-xs align-middle text-slate-600">{node.type}</span></h2>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
                onClick={() => setShowDeleteConfirm(true)}
                className="flex items-center gap-1 text-xs bg-red-50 text-red-700 font-bold px-2 py-1.5 rounded-md hover:bg-red-100 border border-red-100 shadow-sm transition"
                title="Delete Node"
+               data-testid="delete-node-button"
             >
                <Trash2 size={14} />
             </button>
@@ -244,6 +382,31 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
                className="flex items-center gap-1.5 text-xs bg-indigo-50 text-indigo-700 font-bold px-3 py-1.5 rounded-md hover:bg-indigo-100 border border-indigo-100 shadow-sm transition"
             >
                <Sparkles size={14} /> Sandbox
+            </button>
+            {/* ── Import / Export buttons ── */}
+            <button
+               onClick={handleExport}
+               className="flex items-center gap-1 text-xs bg-slate-50 text-slate-700 font-bold px-2 py-1.5 rounded-md hover:bg-slate-100 border border-slate-200 shadow-sm transition"
+               title="Export node as YAML"
+               data-testid="export-yaml-button"
+            >
+               <Download size={14} />
+            </button>
+            <button
+               onClick={() => importFileRef.current?.click()}
+               className="flex items-center gap-1 text-xs bg-slate-50 text-slate-700 font-bold px-2 py-1.5 rounded-md hover:bg-slate-100 border border-slate-200 shadow-sm transition"
+               title="Import node from YAML"
+               data-testid="import-yaml-button"
+            >
+               <Upload size={14} />
+            </button>
+            <button
+               onClick={handleExportWithPrompt}
+               className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 font-bold px-2 py-1.5 rounded-md hover:bg-amber-100 border border-amber-100 shadow-sm transition"
+               title="Export with LLM coaching prompt"
+               data-testid="export-prompt-button"
+            >
+               <FileText size={14} />
             </button>
             <button onClick={onClose} className="p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition rounded-md"><X size={18} /></button>
           </div>
@@ -254,6 +417,12 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
             <div className="font-bold text-red-700 text-sm whitespace-nowrap">⚠ Error</div>
             <div className="flex-1 overflow-hidden break-words text-sm text-red-900">{errorMessage}</div>
             <button className="text-red-400 hover:text-red-700 font-bold px-1" onClick={() => setErrorMessage(null)}>X</button>
+         </div>
+       )}
+
+        {importSuccess && (
+         <div data-testid="import-success-banner" className="mx-5 mt-5 mb-0 bg-emerald-50 border-l-4 border-emerald-500 p-3 shadow-sm flex items-center gap-2 rounded-r-md">
+            <div className="font-bold text-emerald-700 text-sm">✓ Node imported successfully</div>
          </div>
        )}
 
@@ -356,17 +525,21 @@ export function NodeEditPanel({ nodeId, onClose }: { nodeId: string; onClose: ()
 
           {node.type === 'project' && (
             <div className="pt-3 border-t">
-              <button
-                type="button"
-                onClick={() => setArchExpanded(e => !e)}
-                className="w-full flex items-center justify-between text-xs font-semibold text-slate-600 hover:text-slate-800 transition"
-              >
-                <span className="flex items-center gap-1.5">
+              <div className="flex items-center justify-between w-full">
+                <button
+                  type="button"
+                  onClick={() => setArchExpanded(e => !e)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 transition"
+                >
                   Architecture Context
-                  <span className="font-normal text-slate-400 normal-case tracking-normal">ℹ️ Injected into all LLM prompts</span>
-                </span>
-                {archExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-              </button>
+                  <span className="font-normal text-slate-400 normal-case tracking-normal hidden min-[400px]:inline">ℹ️ Injected into LLM prompts</span>
+                  {archExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </button>
+                <div className="flex gap-2">
+                   <button onClick={handleExportArchPrompt} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100 font-semibold transition" title="Generate LLM Prompt">Prompt LLM</button>
+                   <button onClick={() => archImportRef.current?.click()} className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-200 hover:bg-emerald-100 font-semibold transition" title="Import LLM Output">Import JSON</button>
+                </div>
+              </div>
 
               {archExpanded && (
                 <div className="mt-3 space-y-3">

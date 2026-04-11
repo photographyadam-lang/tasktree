@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(venv/Scripts/python.exe -c \"import main; print\\('OK'\\)\")",
+      "Bash(npx tsc:*)",
+      "Bash(grep -v \"^C:\\\\\\\\\\\\\\\\Users\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(grep -v \"^C:\\\\\\\\\\\\\\\\Users.*node_modules\")"
+    ]
+  }
+}
